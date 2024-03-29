@@ -11,11 +11,10 @@ import asyncio
 import aiohttp
 
 import recipe
+from util import int_to_pair, pair_to_int, DEFAULT_STARTING_ITEMS
 
-# import tracemalloc
 
-
-init_state: tuple[str, ...] = ("Water", "Fire", "Wind", "Earth")
+init_state: tuple[str, ...] = DEFAULT_STARTING_ITEMS
 
 # For people who want to start with a lot more things
 elements = ["Hydrogen", "Helium", "Lithium", "Beryllium", "Boron", "Carbon", "Nitrogen", "Oxygen", "Fluorine", "Neon",
@@ -39,6 +38,8 @@ letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J",
 
 rearrange_words = ["Anagram", "Reverse", "Opposite", "Scramble", "Rearrange", "Palindrome", "Not"]
 
+speedrun_current_words = ["Plant", "Dandelion", "Wine", "Weed", "Holy Water", "Bong", "Vampire", "Jesus", "Count", "Number", "1"]
+
 letters2 = []
 for l1 in letters:
     for l2 in letters:
@@ -46,8 +47,9 @@ for l1 in letters:
 
 # init_state = tuple(list(init_state) + elements + ["Periodic Table",])
 # init_state = tuple(list(init_state) + letters + letters2)
+init_state = tuple(list(init_state) + speedrun_current_words)
 recipe_handler = recipe.RecipeHandler(init_state)
-depth_limit = 11
+depth_limit = 5
 extra_depth = 1
 
 best_recipes: dict[str, list[list[tuple[str, str, str]]]] = dict()
@@ -64,25 +66,6 @@ last_game_state: Optional['GameState'] = None
 new_last_game_state: Optional['GameState'] = None
 autosave_interval = 500     # Save every 500 new visited elements
 autosave_counter = 0
-
-
-@cache
-def int_to_pair(n: int) -> tuple[int, int]:
-    if n < 0:
-        return -1, -1
-    j = 0
-    while n > j:
-        n -= j + 1
-        j += 1
-    i = n
-    return i, j
-
-
-@cache
-def pair_to_int(i: int, j: int) -> int:
-    if j < i:
-        i, j = j, i
-    return i + (j * (j + 1)) // 2
 
 
 @cache

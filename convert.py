@@ -2,6 +2,7 @@ import asyncio
 import json
 import math
 import os
+import sqlite3
 from functools import cache
 from typing import Optional
 
@@ -309,6 +310,35 @@ def merge_old(file_r: str, file_i: str):
         recipe_handler.add_recipe(u, v, r)
 
 
+def merge_sql(file_new: str):
+    rh = recipe.RecipeHandler(("Water", "Fire", "Wind", "Earth"))
+
+    new_db = sqlite3.connect(file_new)
+    new_cursor = new_db.cursor()
+
+    # Get everything from the items table
+    new_cursor.execute("SELECT * FROM items")
+    for i in new_cursor:
+        rh.add_item(i[1], i[2], i[3])
+
+    print("Finished adding all items")
+
+    # Get everything from the recipes table, and convert them to items
+    new_cursor.execute("""
+            SELECT ing1.name, ing2.name, result.name
+            FROM recipes
+            JOIN items   AS ing1   ON ing1.id = recipes.ingredient1_id
+            JOIN items   AS ing2   ON ing2.id = recipes.ingredient2_id
+            JOIN items   AS result ON result.id = recipes.result_id
+            """)
+    num_recipes = 0
+    for r in new_cursor:
+        rh.add_recipe(r[0], r[1], r[2])
+        num_recipes += 1
+        if num_recipes % 100000 == 0:
+            print(f"Processed {num_recipes} recipes")
+
+
 def get_results_for(results: list[str]):
     recipe_handler = recipe.RecipeHandler(("Water", "Fire", "Wind", "Earth"))
     for result in results:
@@ -410,7 +440,7 @@ def convert_to_savefile(savefile: str, items_file: str, recipes_file: Optional[s
     with open(items_file, "r", encoding="utf-8") as f:
         items = json.load(f)
 
-    items_reverse = {v[1]: [v[0], k, v[2]] for k, v in items.items()}
+    items_reverse: dict[int, list] = {v[1]: [v[0], k, v[2]] for k, v in items.items()}
 
     item_count = 0
     first_discoveries_count = 0
@@ -429,7 +459,7 @@ def convert_to_savefile(savefile: str, items_file: str, recipes_file: Optional[s
         #     break
     print(f"Processed {item_count} items")
 
-    recipes_limit = 6000000
+    recipes_limit = 12000000
     if recipes_file:
         with open(recipes_file, "r", encoding="utf-8") as f:
             recipes = json.load(f)
@@ -448,6 +478,9 @@ def convert_to_savefile(savefile: str, items_file: str, recipes_file: Optional[s
             u_item = items_reverse[u]
             v_item = items_reverse[v]
             result = items_reverse[value][1]
+
+            if u_item[1] == result or v_item[1] == result:
+                continue
 
             u_formatted = {
                 "text": u_item[1],
@@ -567,6 +600,19 @@ def generate_json(output_file: str):
         json.dump(best_recipes, f, ensure_ascii=False)
 
 
+def get_decent_recipe(file: str, item_names: list[str]):
+    with open(file, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    for item_name in item_names:
+        if item_name in data['BestRecipes']:
+            for recipe in data['BestRecipes'][item_name]:
+                for a, b, c in recipe:
+                    print(f"{a} + {b} -> {c}")
+                print("--------------------------")
+        else:
+            print(f"{item_name} not found.")
+
+
 def parse_pbpbpb_cancer_list(file: str) -> list[str]:
     with open(file, "r", encoding="utf-8") as f:
         lines = f.readlines()
@@ -582,11 +628,29 @@ def parse_pbpbpb_cancer_list(file: str) -> list[str]:
     return cancer_list
 
 
-cancers = ['Swamp Thing', 'Werewolf', 'Venus Flytrap', 'Flying Fish', 'Giant Venus Flytrap', 'Sharknado', 'Dust Bunny', 'Muddy Wine', 'Steam Engine', 'Dandelion Wine', 'Dust Bowl', 'Steampunk Pirate', 'Dandelion Patch', 'Zombie King', 'Were-tree', 'Rocky Mountains', 'Monster Truck', 'Tornado', 'Dusty Springfield', 'Flat Earth', 'Fire Trap', 'Loch Ness Monster', 'Piranha Plant', 'Giant Dandelion', 'Flying Car', 'Funnel Cake', 'Steam Punk', 'Paper Boat', 'Mountain Dew', 'Pickle Rick', 'Hangover', 'Flying Sushi', 'Muddy Teapot', 'Balsamic Vinegar', 'Steamboat', 'Drunken Dragon', 'Fire Breathing Dragon', 'Flying Cow', 'Swamp Venus', 'Netherite Sword', 'Steam Robot', 'Muddy Sushi', 'Godzilla', 'Dust Storm', 'Poison Ivy', 'Darth Vader', 'Smoky Mountains', 'Chocolate Milk', 'Tsunami', 'Glasser', 'Flying Shark', 'Burning Man', 'Flying Frog', 'Soggy Toast', 'Hot Air Balloon', 'Niagara Falls', 'Wish Upon A Star', 'Mr. Potato Head', 'Swampasaurus', 'Zephyr Train', 'SpongeBob', 'Surf and Turf', 'Surfboard', 'Tea Party', 'Boiling Frog', 'Duck Sauce', 'Dandelion', 'Mecha Dragon', 'Flying Spaghetti Monster', 'Muddy Wind Farm', 'Piggyback', 'Pterodactyl', 'Surfing', 'Birthday Cake', 'Flying Plant', 'Flying Starfish', 'Beef Bourguignon', 'Dandelion Tea', 'Mars Rover', 'Venus Fly Trap', 'Gone With The Wind', 'Thunderbird', 'Flying Pig', 'Big Trouble in Little China', 'Amphibious Car', 'Cheese Wheel', 'Great Wall of China', 'Mudslide', 'Flying Soup', 'Dandelion Soup', 'Kite Surfing', 'Unicorn', 'Sperm Whale', 'Jellyfish', 'Amphicar', 'Chicken Noodle Soup', 'Mermaid', 'Water Rocket', 'Rainbow Trout', 'Lawnmower']
+cancers = ['Swamp Thing', 'Werewolf', 'Venus Flytrap', 'Flying Fish', 'Giant Venus Flytrap', 'Sharknado', 'Dust Bunny',
+           'Muddy Wine', 'Steam Engine', 'Dandelion Wine', 'Dust Bowl', 'Steampunk Pirate', 'Dandelion Patch',
+           'Zombie King', 'Were-tree', 'Rocky Mountains', 'Monster Truck', 'Tornado', 'Dusty Springfield', 'Flat Earth',
+           'Fire Trap', 'Loch Ness Monster', 'Piranha Plant', 'Giant Dandelion', 'Flying Car', 'Funnel Cake',
+           'Steam Punk', 'Paper Boat', 'Mountain Dew', 'Pickle Rick', 'Hangover', 'Flying Sushi', 'Muddy Teapot',
+           'Balsamic Vinegar', 'Steamboat', 'Drunken Dragon', 'Fire Breathing Dragon', 'Flying Cow', 'Swamp Venus',
+           'Netherite Sword', 'Steam Robot', 'Muddy Sushi', 'Godzilla', 'Dust Storm', 'Poison Ivy', 'Darth Vader',
+           'Smoky Mountains', 'Chocolate Milk', 'Tsunami', 'Glasser', 'Flying Shark', 'Burning Man', 'Flying Frog',
+           'Soggy Toast', 'Hot Air Balloon', 'Niagara Falls', 'Wish Upon A Star', 'Mr. Potato Head', 'Swampasaurus',
+           'Zephyr Train', 'SpongeBob', 'Surf and Turf', 'Surfboard', 'Tea Party', 'Boiling Frog', 'Duck Sauce',
+           'Dandelion', 'Mecha Dragon', 'Flying Spaghetti Monster', 'Muddy Wind Farm', 'Piggyback', 'Pterodactyl',
+           'Surfing', 'Birthday Cake', 'Flying Plant', 'Flying Starfish', 'Beef Bourguignon', 'Dandelion Tea',
+           'Mars Rover', 'Venus Fly Trap', 'Gone With The Wind', 'Thunderbird', 'Flying Pig',
+           'Big Trouble in Little China', 'Amphibious Car', 'Cheese Wheel', 'Great Wall of China', 'Mudslide',
+           'Flying Soup', 'Dandelion Soup', 'Kite Surfing', 'Unicorn', 'Sperm Whale', 'Jellyfish', 'Amphicar',
+           'Chicken Noodle Soup', 'Mermaid', 'Water Rocket', 'Rainbow Trout', 'Lawnmower']
+
+
 # PBPBPB: I'm just checking if first and last 2 tokens of an A or B are the same as the resulting element C.
 
 
-async def try_cancer_combinations(rh: recipe.RecipeHandler, session: aiohttp.ClientSession, word1: str) -> list[tuple[str, str, str]]:
+async def try_cancer_combinations(rh: recipe.RecipeHandler, session: aiohttp.ClientSession, word1: str) -> list[
+    tuple[str, str, str]]:
     results = []
     for word2 in cancers:
         result = await rh.combine(session, word1, word2)
@@ -597,7 +661,8 @@ async def try_cancer_combinations(rh: recipe.RecipeHandler, session: aiohttp.Cli
     return results
 
 
-async def try_in_a_combinations(rh: recipe.RecipeHandler, session: aiohttp.ClientSession, wordlist: list[str]) -> list[tuple[str, str]]:
+async def try_in_a_combinations(rh: recipe.RecipeHandler, session: aiohttp.ClientSession, wordlist: list[str]) -> list[
+    tuple[str, str]]:
     results = []
     for word in wordlist:
         # print(word)
@@ -638,13 +703,16 @@ async def main():
 
 if __name__ == '__main__':
     pass
-    if os.name == 'nt':
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    asyncio.run(main())
+    # if os.name == 'nt':
+    #     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    # asyncio.run(main())
+
+    # merge_sql("Depth 12/recipes_depth12b.db")
     # generate_single_best_recipe("best_recipes.txt")
+    # get_decent_recipe("Depth 11/persistent_depth11+1.json", ["1"])
     # generate_json("all_best_recipes_depth_11.json")
     # add_to_recipe_handler("cache/items.json", "cache/recipes.json")
-    # convert_to_savefile("infinitecraft_large_with_partial_recipes.json", "cache/items.json", "cache/recipes.json")
+    convert_to_savefile("infinitecraft_large_with_no_nothings.json", "cache/items.json", "cache/recipes.json")
     # cancers = parse_pbpbpb_cancer_list("top_cancer_a.txt")
     # print(cancers)
     # d = load_save_file("infinitecraft_main_old_save_58k.json")

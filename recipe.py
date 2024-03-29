@@ -12,20 +12,7 @@ import aiohttp
 from bidict import bidict
 import sqlite3
 
-WORD_TOKEN_LIMIT = 20
-WORD_COMBINE_CHAR_LIMIT = 30
-
-
-def pair_to_int(i: int, j: int) -> int:
-    if j < i:
-        i, j = j, i
-    return i + (j * (j + 1)) // 2
-
-
-def int_to_pair(n: int) -> tuple[int, int]:
-    j = math.floor(((8 * n + 1) ** 0.5 - 1) / 2)
-    i = n - (j * (j + 1)) // 2
-    return i, j
+from util import int_to_pair, pair_to_int, WORD_COMBINE_CHAR_LIMIT
 
 
 # Insert a recipe into the database
@@ -70,7 +57,7 @@ class RecipeHandler:
     sleep_time: float = 1.0
     sleep_default: float = 1.0
     retry_exponent: float = 2.0
-    local_only: bool = True
+    local_only: bool = False
     trust_cache_nothing: bool = True  # Trust the local cache for "Nothing" results
     trust_first_run_nothing: bool = False  # Save as "Nothing" in the first run
     local_nothing_indication: str = "Nothing\t"  # Indication of untrusted "Nothing" in the local cache
@@ -358,7 +345,8 @@ async def main():
     #     for l2 in letters:
     #         letters2.append(l1 + l2)
     #
-    # r = RecipeHandler([])
+    # rh = RecipeHandler([])
+    # print(rh.get_crafts("Periodic"))
     # letter_recipes = {}
     # for two_letter_combo in letters2:
     #     uses = r.get_uses(two_letter_combo)

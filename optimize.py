@@ -3,6 +3,14 @@
 import recipe
 import speedrun
 
+# TODO: 2 types of optimization
+# 1. In-place: No new elements, only look at subsets of original that can be crafted
+# 2. Limited-depth: Allow new elements up to a certain deviation from the original path
+# 2a) iddfs (top-down)
+# 2b) A* (bottom-up, single destination)
+
+# The actual algorithms are implemented in the `optimizers/` folder
+# The interface is implemented in `optimizer_interface.py`
 
 def parse_craft_file(filename: str):
     with open(filename, 'r') as file:
@@ -40,3 +48,5 @@ def parse_craft_file(filename: str):
         current[results.strip()] = 0
         # print(f'{ing1} + {ing2} -> {results}')
     return crafts
+
+

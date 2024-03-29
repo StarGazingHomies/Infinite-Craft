@@ -237,11 +237,11 @@ with open("pony_episodes.txt", "r") as fin:
         # y = (e + (s % 2) * 26) * pony_ep_height
         x = s * pony_ep_width
         y = e * pony_ep_height
-        pony_locations.append([name.strip().replace(',', '').replace('- ', ''), x, y])
+        pony_locations.append([name.strip().replace(', ', '').replace('- ', ''), x, y])
 
 print(pony_locations)
 with open("pony_locations.json", "w", encoding='utf-8') as fout:
-    json.dump({"locations": pony_locations}, fout, ensure_ascii=False, indent=4)
+    json.dump({"locations": pony_locations[::-1]}, fout, ensure_ascii=False, indent=4)
 
 
 with open("in_a_results.txt", "r") as fin:

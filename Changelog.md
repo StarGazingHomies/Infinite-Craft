@@ -1,21 +1,19 @@
 # Changelog
-This document details the changes I made, 
-and how they impact the performance of the program.
-
-
-All benchmarks are ran on a personal system with the following specs:
-i9-13950HX,
-128GB RAM
-
-Note that power settings and the like can change between versions, so results
-are not comparable between them.
 
 TODO:
-- Saving current progress, and resuming from the last point to avoid heavy precompute
 - Better configuration (CLI arguments or config file)
-
-Future TODO:
 - Speedrun auto-optimization (minimum spanning hypergraph)
+- Transformers (model: minillama or similar) tokenizers
+
+
+## Version 1.5
+
+Added optimizers for speedrunning and existing savefiles!
+(TODO: actually complete them lol)
+
+- Separated the `pair_to_int` and `int_to_pair` functions 
+along with static variables such as `DEFAULT_STARTING_ITEMS` 
+and `WORD_COMBINE_CHAR_LIMIT`into `util.py`.
 
 
 ## Version 1.4
@@ -72,6 +70,18 @@ Do note that the parity of depth has some impact on the number of states.
       7         2682       2.6203     503132       0.812       39284
       8         6566      19.3702    3844983       3.871      209607
       9        17045     163.8879   31438265      21.261     1191681
+
+                                NEW
+    DEPTH   |   SIZE   |  TIME   |   STATES   |  
+      1           10      0.030          10
+      2           29      0.031          29
+      3           81      0.036         113
+      4          211      0.045         414
+      5          486      0.095        1642
+      6         1114      0.229        7822
+      7         2682      0.812       39284
+      8         6566      3.871      209607
+      9        17045     21.261     1191681
 
 
 ## Version 1.2.2
