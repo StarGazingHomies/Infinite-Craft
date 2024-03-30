@@ -3,7 +3,8 @@ Interfaces for optimizers to use
 Provides an in-memory recipe list with O(1) lookup in both directions,
 and converting from IDs to names and vice versa.
 
-Also includes methods to quickly generate the generation of each element.
+Also includes generation of each element's generation
+as well as converting from a save file.
 """
 from collections import deque
 from typing import Optional
@@ -13,10 +14,18 @@ from util import int_to_pair, pair_to_int, DEFAULT_STARTING_ITEMS
 
 
 class OptimizerRecipeList:
+    # Maps item name (lower case) to item id
     ids: bidict[str, int]
+    # Forward recipe list
+    # int_to_pair(ingredient1, ingredient2) -> result
     fwd: dict[int, int]
+    # Backward recipe list
+    # result -> [(ingredient1, ingredient2), (ingredient1, ingredient2)]
     bwd: dict[int, list[tuple[int, int]]]
+    # Generation of each element
+    # item_id -> generation
     gen: Optional[dict[int, int]]
+    # Whether the generation has been generated, so nothing happens again
     gen_generated: bool = False
 
     def __init__(self, items: list[str]):
@@ -24,7 +33,7 @@ class OptimizerRecipeList:
         self.bwd = {}
         self.ids = bidict()
         for i, item in enumerate(items):
-            self.ids[item] = i
+            self.ids[item.lower()] = i
         self.gen = None
 
     def __str__(self):
@@ -34,7 +43,7 @@ class OptimizerRecipeList:
         return self.ids.inv[item_id]
 
     def get_id(self, name: str) -> int:
-        return self.ids[name]
+        return self.ids[name.lower()]
 
     def get_generation_id(self, item_id: int) -> Optional[int]:
         if self.gen is None:
@@ -52,7 +61,7 @@ class OptimizerRecipeList:
         self.fwd[pair_to_int(ingredient1, ingredient2)] = result
 
     def add_recipe_name(self, result: str, ingredient1: str, ingredient2: str):
-        self.add_recipe_id(self.ids[result], self.ids[ingredient1], self.ids[ingredient2])
+        self.add_recipe_id(self.get_id(result), self.get_id(ingredient1), self.get_id(ingredient2))
 
     def get_ingredients_id(self, result: int) -> list[tuple[int, int]]:
         try:
@@ -62,18 +71,19 @@ class OptimizerRecipeList:
 
     def get_result_id(self, ingredient1: int, ingredient2: int) -> int:
         try:
-            return self.fwd.get(pair_to_int(ingredient1, ingredient2))
+            return self.fwd[pair_to_int(ingredient1, ingredient2)]
         except KeyError:
             return -1
 
     def generate_generations(self, init_items: list[str] = DEFAULT_STARTING_ITEMS) -> None:
         # O(V^2) time complexity
+        # Don't generate if it's already generated
         if self.gen_generated:
             return
         self.gen_generated = True
 
-        self.gen: dict[int, int] = {}  # The generation of each element
-        visited: list[int] = []        # Already processed elements
+        self.gen: dict[int, int] = {}          # The generation of each element
+        visited: list[int] = []                # Already processed elements
         for item in init_items:
             self.gen[self.get_id(item)] = 0
             visited.append(self.get_id(item))
@@ -87,15 +97,17 @@ class OptimizerRecipeList:
             if v not in self.gen:
                 raise ValueError(f"Item {v} not in generation list")
 
-            # New Item Stats
-            new_generation = max(self.gen[u], self.gen[v]) + 1
-            new_item = self.get_result_id(u, v)
+            # New generation is the old generation + 1
+            new_generation: int = max(self.gen[u], self.gen[v]) + 1
+            # The crafting result of u + v
+            new_item: int = self.get_result_id(u, v)
 
             # Only add if the item isn't visited. Generation will always be increasing since it's effectively bfs.
             if new_item and new_item >= 0 and new_item not in self.gen:
                 self.gen[new_item] = new_generation
                 queue.append(new_item)
 
+        # Initialize based on what items are available
         for i, item1 in enumerate(init_items):
             for j, item2 in enumerate(init_items[i:]):
                 enqueue(self.get_id(item1), self.get_id(item2))
@@ -132,7 +144,7 @@ def main():
     optimizer_recipes.generate_generations()
     for item_id, generation in optimizer_recipes.gen.items():
         print(f"{optimizer_recipes.get_name(item_id)}: {generation}")
-    # print(optimizer_recipes.gen)
+    print(optimizer_recipes.gen)
 
 
 if __name__ == '__main__':

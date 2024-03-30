@@ -4,6 +4,7 @@ Requires already having a valid route to the destination - TODO: choose how miss
 Based on BRH0208's A*
 
 Note: This is not applicable for high-density recipe books or super-high-generation recipes.
+because branching factor will apply rather quickly
 """
 
 from optimizers.optimizer_interface import OptimizerRecipeList, savefile_to_optimizer_recipes
@@ -13,11 +14,10 @@ import heapq
 
 class AStarOptimizerState:
     craft_count: int
-    # current: list[tuple[int, int]]       # Crafts to do, depth of each of the items
-    current: set[int]
-    crafted: set[int]
-    trace: list[tuple[int, int, int]]    # The trace of the state
-    heuristic: float
+    current: set[int]                      # Crafts to do
+    crafted: set[int]                      # Crafts already done
+    trace: list[tuple[int, int, int]]      # The trace of the state, for giving the final recipe
+    heuristic: float                       # Heuristic value
 
     def __init__(self, recipe_list: OptimizerRecipeList, craft_count: int, current: set[int], crafted=None, trace=None):
         if trace is None:
@@ -33,12 +33,26 @@ class AStarOptimizerState:
     def __str__(self):
         return f"State with {self.craft_count} crafts and {self.current} remaining. Heuristic is {self.heuristic}"
 
+    def pretty_str(self, recipe_list: OptimizerRecipeList):
+        todo_crafts = [f"{recipe_list.get_name(x)}" for x in self.current]
+        done_steps = "\n".join(
+            [f"{recipe_list.get_name(u)} + {recipe_list.get_name(v)} -> {recipe_list.get_name(result)}"
+             for u, v, result in self.trace])
+        return f"State with {self.craft_count} crafts and {todo_crafts} remaining. Heuristic is {self.heuristic}\n" \
+               f"Steps: \n{done_steps}"
+
+    def calc_heuristic_non_admissible(self, recipe_list: OptimizerRecipeList) -> int:
+        # Non-admissible heuristic: sum of generation for all elements.
+        return self.craft_count + sum([recipe_list.get_generation_id(x) for x in self.current])
+
     def calc_heuristic_simple(self, recipe_list: OptimizerRecipeList) -> int:
-        # Simple admissible heuristic: generation for all elements. Does not take into account repeating generations.
+        # Simple admissible heuristic: maximum generation for all elements.
+        # Does not take into account repeating generations.
         return self.craft_count + max([recipe_list.get_generation_id(x) for x in self.current])
 
-    def calc_heuristic(self, recipe_list: OptimizerRecipeList) -> float:
-        # Better admissible heuristic: generation for all elements. Takes into account repeating generations.
+    def calc_heuristic_complex(self, recipe_list: OptimizerRecipeList) -> float:
+        # Better admissible heuristic: generation for all elements.
+        # Takes into account repeating generations.
         if len(self.current) == 0:
             return self.craft_count
         generations = [recipe_list.get_generation_id(i) for i in self.current]
@@ -49,27 +63,33 @@ class AStarOptimizerState:
         # Can possibly add craft_count in an inconsequential way,
         # such as - 0.001 * self.craft_count for self.craft_count < 1000
 
+    calc_heuristic = calc_heuristic_complex
+
     def crafts(self, recipe_list: OptimizerRecipeList) -> list['AStarOptimizerState']:
         # Returns the possible crafts from the current state
         result = []
-        for item_id in self.current:
-            cur_remaining = self.current.copy()
-            cur_remaining.remove(item_id)
 
-            for u, v in recipe_list.get_ingredients_id(item_id):
-                if u in self.crafted or v in self.crafted:
-                    continue
-                new_items = cur_remaining.copy()
-                new_crafted = self.crafted.copy().add(item_id)
-                if recipe_list.get_generation_id(u) != 0:
-                    new_items.add(u)
-                if recipe_list.get_generation_id(v) != 0:
-                    new_items.add(v)
-                result.append(AStarOptimizerState(recipe_list,
-                                                  self.craft_count + 1,
-                                                  new_items,
-                                                  new_crafted,
-                                                  self.trace + [(u, v, item_id)]))
+        # Craft highest generation item
+        item_id = max(self.current, key=lambda x: recipe_list.get_generation_id(x))
+
+        cur_remaining = self.current.copy()
+        cur_remaining.remove(item_id)
+
+        for u, v in recipe_list.get_ingredients_id(item_id):
+            if u in self.crafted or v in self.crafted:
+                continue
+            new_items = cur_remaining.copy()
+            new_crafted = self.crafted.copy()
+            new_crafted.add(item_id)
+            if recipe_list.get_generation_id(u) != 0:
+                new_items.add(u)
+            if recipe_list.get_generation_id(v) != 0:
+                new_items.add(v)
+            result.append(AStarOptimizerState(recipe_list,
+                                              self.craft_count + 1,
+                                              new_items,
+                                              new_crafted,
+                                              self.trace + [(u, v, item_id)]))
         return result
 
     def is_complete(self) -> bool:
@@ -82,7 +102,18 @@ class AStarOptimizerState:
         return self.heuristic == other.heuristic
 
 
-def optimize(target: str, recipe_list: OptimizerRecipeList, upper_bound=128):
+def optimize(
+        target: str,
+        recipe_list: OptimizerRecipeList,
+        upper_bound: int,
+        initial_crafts: list[str] = None,
+        max_deviations: int = 128):
+    # Parsing args - TODO: implement deviation counting
+    check_deviations = False
+    if initial_crafts and max_deviations > 0:
+        check_deviations = True
+
+    # Generate generations
     recipe_list.generate_generations()
 
     target_id = recipe_list.get_id(target)
@@ -94,11 +125,10 @@ def optimize(target: str, recipe_list: OptimizerRecipeList, upper_bound=128):
     start = AStarOptimizerState(recipe_list, 0, {target_id})
 
     # Priority Queue
-    priority_queue = []
+    priority_queue: list[AStarOptimizerState] = []
     visited: dict[frozenset[int], int] = {}
+    processed: set[frozenset[int]] = set()
     heapq.heappush(priority_queue, (start.heuristic, start))
-
-    # Already visited states - may not be necessary?
 
     # Main loop
     while len(priority_queue) > 0:
@@ -112,8 +142,9 @@ def optimize(target: str, recipe_list: OptimizerRecipeList, upper_bound=128):
                 print(f"{recipe_list.get_name(u)} + {recipe_list.get_name(v)} -> {recipe_list.get_name(result)}")
             break
 
-        if visited[frozenset(current_state.current)] <= current_state.craft_count:
+        if frozenset(current_state.current) in processed:
             continue
+        processed.add(frozenset(current_state.current))
 
         # print(f"Current: {current_state}")
         next_state: AStarOptimizerState
@@ -131,14 +162,15 @@ def optimize(target: str, recipe_list: OptimizerRecipeList, upper_bound=128):
             visited[current_set] = next_state.craft_count
             heapq.heappush(priority_queue, (next_state.heuristic, next_state))
 
-        print("Current state: ", current_state)
+        # print("Current state: ", current_state.pretty_str(recipe_list))
+        print("Current state:", current_state)
         print("Queue length: ", len(priority_queue))
         # input()
 
 
 def main():
-    optimize("Firebird", savefile_to_optimizer_recipes("../yui_optimizer_savefile.json"))
-    # optimize("1444980", savefile_to_optimizer_recipes("../yui_optimizer_savefile.json"))
+    optimize("Firebird", savefile_to_optimizer_recipes("../yui_optimizer_savefile.json"), 12)
+    # optimize("1444980", savefile_to_optimizer_recipes("../yui_optimizer_savefile.json"), 128)
     pass
 
 
