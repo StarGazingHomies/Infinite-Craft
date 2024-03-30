@@ -14,6 +14,11 @@ Added optimizers for speedrunning and existing savefiles!
 - Separated the `pair_to_int` and `int_to_pair` functions 
 along with static variables such as `DEFAULT_STARTING_ITEMS` 
 and `WORD_COMBINE_CHAR_LIMIT`into `util.py`.
+- Added a `OptimizerRecipeList` class for a common interface
+between all of the optimizers that will be implemented.
+- Added an A* algorithm starting from the result element with a
+generation-based admissible heuristic. (Source: BRH0208)
+- 
 
 
 ## Version 1.4

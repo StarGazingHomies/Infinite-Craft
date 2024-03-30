@@ -51,6 +51,7 @@ def load_json(file: str) -> dict:
 class RecipeHandler:
     db: sqlite3.Connection
     db_location: str = "cache/recipes.db"
+    closed: bool = False
 
     last_request: float = 0
     request_cooldown: float = 0.5  # 0.5s is safe for this API
@@ -72,7 +73,7 @@ class RecipeHandler:
         self.headers = load_json("headers.json")["api"]
 
         self.db = sqlite3.connect(self.db_location)
-        atexit.register(lambda: (self.db.commit(), self.db.close()))
+        atexit.register(lambda: (self.close()))
         # Items table
         self.db.execute("""
             CREATE TABLE IF NOT EXISTS items (
@@ -113,6 +114,19 @@ class RecipeHandler:
         #         if result < 0:
         #             self.recipes_cache[ingredients] = -2
         #     save_json(self.recipes_cache, self.recipes_file)
+
+    def close(self):
+        if self.closed:
+            return
+        self.db.commit()
+        self.db.close()
+        self.closed = True
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
 
     def add_item(self, item: str, emoji: str, first_discovery: bool = False):
         # print(f"Adding: {item} ({emoji})")
@@ -321,6 +335,9 @@ class RecipeHandler:
                         return await resp.json()
                     else:
                         print(f"Request failed with status {resp.status}", file=sys.stderr)
+                        if resp.status == 500:
+                            print(f"Internal Server Error when combining {a} + {b}", file=sys.stderr)
+
                         time.sleep(self.sleep_time)
                         self.sleep_time *= self.retry_exponent
                         print("Retrying...", flush=True)

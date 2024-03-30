@@ -154,7 +154,7 @@ tool_groups = [
             ["Flip", "Swap"],
             ["Reverse", "Anagram"],
             "Repeat",
-            "Makeoneword"
+            "Misspelling"
         ]
     ],
     [

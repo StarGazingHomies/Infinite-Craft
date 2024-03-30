@@ -1,7 +1,14 @@
 # Speedrun Optimizer
+import os
+
+import aiohttp
 
 import recipe
 import speedrun
+import util
+import optimizers.a_star as a_star
+from optimizers.optimizer_interface import OptimizerRecipeList
+
 
 # TODO: 2 types of optimization
 # 1. In-place: No new elements, only look at subsets of original that can be crafted
@@ -11,6 +18,7 @@ import speedrun
 
 # The actual algorithms are implemented in the `optimizers/` folder
 # The interface is implemented in `optimizer_interface.py`
+
 
 def parse_craft_file(filename: str):
     with open(filename, 'r') as file:
@@ -50,3 +58,70 @@ def parse_craft_file(filename: str):
     return crafts
 
 
+async def request_extra_generation(session: aiohttp.ClientSession, rh: recipe.RecipeHandler, current: list[str]):
+    # Only one generation for now, maybe iddfs or recursion later
+    new_items = set()
+    for item1 in current:
+        for item2 in current:
+            new_item = await rh.combine(session, item1, item2)
+            if new_item and new_item != "Nothing" and new_item not in current:
+                new_items.add(new_item)
+    return new_items
+
+
+async def get_all_recipes(session: aiohttp.ClientSession, rh: recipe.RecipeHandler, items: list[str]):
+    # Only store valid recipes
+    recipes = []
+    items_set = set(items)
+    for u, item1 in enumerate(items):
+        for item2 in items[u:]:
+            new_item = await rh.combine(session, item1, item2)
+            if new_item in items_set:
+                recipes.append((item1, item2, new_item))
+    return recipes
+
+
+async def initialize_optimizer(session: aiohttp.ClientSession, rh: recipe.RecipeHandler, items: list[str]) -> OptimizerRecipeList:
+    # Get an extra generation
+    # new_items = await request_extra_generation(session, rh, items)
+    # items.extend(new_items)
+    # Get all recipes
+    recipes = await get_all_recipes(session, rh, items)
+    recipe_list = OptimizerRecipeList(items)
+    for recipe_data in recipes:
+        recipe_list.add_recipe_name(recipe_data[2], recipe_data[0], recipe_data[1])
+    return recipe_list
+
+
+async def main():
+    crafts = parse_craft_file("speedrun.txt")
+    craft_results = [crafts[2] for crafts in crafts]
+    target = craft_results[-1]
+    max_crafts = len(crafts)
+    final_items_for_current_recipe = list(util.DEFAULT_STARTING_ITEMS) + craft_results
+    print(final_items_for_current_recipe)
+
+    # Request and build items cache
+    headers = recipe.load_json("headers.json")["default"]
+    with recipe.RecipeHandler(util.DEFAULT_STARTING_ITEMS) as rh:
+        async with aiohttp.ClientSession() as session:
+            async with session.get("https://neal.fun/infinite-craft/", headers=headers) as resp:
+                pass
+            optimizer_recipes = await initialize_optimizer(session, rh, final_items_for_current_recipe)
+
+    optimizer_recipes.generate_generations()
+    print(optimizer_recipes)
+    print(target)
+    print(optimizer_recipes.get_id(target))
+    print(optimizer_recipes.get_generation_id(optimizer_recipes.get_id(target)))
+
+    # Run the optimizer
+    a_star.optimize(target, optimizer_recipes, max_crafts)
+
+
+if __name__ == '__main__':
+    import asyncio
+
+    if os.name == 'nt':
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    asyncio.run(main())

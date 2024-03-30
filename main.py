@@ -38,7 +38,8 @@ letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J",
 
 rearrange_words = ["Anagram", "Reverse", "Opposite", "Scramble", "Rearrange", "Palindrome", "Not"]
 
-speedrun_current_words = ["Plant", "Dandelion", "Wine", "Weed", "Holy Water", "Bong", "Vampire", "Jesus", "Count", "Number", "1"]
+speedrun_current_words = ["Lake", "Plant", "Lily", "Volcano", "Island", "Continent",
+                          "America", "USA", "Tea", "Taxes", "Filing", "File "]
 
 letters2 = []
 for l1 in letters:
@@ -49,8 +50,8 @@ for l1 in letters:
 # init_state = tuple(list(init_state) + letters + letters2)
 init_state = tuple(list(init_state) + speedrun_current_words)
 recipe_handler = recipe.RecipeHandler(init_state)
-depth_limit = 5
-extra_depth = 1
+depth_limit = 7
+extra_depth = 0
 
 best_recipes: dict[str, list[list[tuple[str, str, str]]]] = dict()
 visited = set()

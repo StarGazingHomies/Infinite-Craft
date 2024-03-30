@@ -17,6 +17,7 @@ class OptimizerRecipeList:
     fwd: dict[int, int]
     bwd: dict[int, list[tuple[int, int]]]
     gen: Optional[dict[int, int]]
+    gen_generated: bool = False
 
     def __init__(self, items: list[str]):
         self.fwd = {}
@@ -34,6 +35,11 @@ class OptimizerRecipeList:
 
     def get_id(self, name: str) -> int:
         return self.ids[name]
+
+    def get_generation_id(self, item_id: int) -> Optional[int]:
+        if self.gen is None:
+            return None
+        return self.gen.get(item_id)
 
     def add_recipe_id(self, result: int, ingredient1: int, ingredient2: int):
         # Add to backward
@@ -62,6 +68,9 @@ class OptimizerRecipeList:
 
     def generate_generations(self, init_items: list[str] = DEFAULT_STARTING_ITEMS) -> None:
         # O(V^2) time complexity
+        if self.gen_generated:
+            return
+        self.gen_generated = True
 
         self.gen: dict[int, int] = {}  # The generation of each element
         visited: list[int] = []        # Already processed elements
@@ -116,7 +125,7 @@ def savefile_to_optimizer_recipes(file: str) -> OptimizerRecipeList:
     return optimizer
 
 
-if __name__ == '__main__':
+def main():
     savefile_name = "../yui_optimizer_savefile.json"
     optimizer_recipes = savefile_to_optimizer_recipes(savefile_name)
     print(optimizer_recipes)
@@ -124,3 +133,7 @@ if __name__ == '__main__':
     for item_id, generation in optimizer_recipes.gen.items():
         print(f"{optimizer_recipes.get_name(item_id)}: {generation}")
     # print(optimizer_recipes.gen)
+
+
+if __name__ == '__main__':
+    main()
