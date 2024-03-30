@@ -66,8 +66,8 @@ class AStarOptimizerState:
     calc_heuristic = calc_heuristic_complex
 
     def get_children(self, u: int) -> set[int]:
-        # Gets the child crafts of the element
-        # (i.e. what elements are crafted from this element)
+        # Gets all elements that depends on u
+        # to check for circular dependencies
         dependency_set = {u}
         for ing1, ing2, result in self.trace[::-1]:
             if ing1 in dependency_set or ing2 in dependency_set:
@@ -88,8 +88,7 @@ class AStarOptimizerState:
         cur_remaining.remove(item_id)
 
         for u, v in recipe_list.get_ingredients_id(item_id):
-            # TODO: Only check for circular dependencies...
-            # (This is incorrect and can miss some legitimate recipes)
+            # Check for circular dependencies
             if u in item_children or v in item_children:
                 continue
 
@@ -155,7 +154,7 @@ def optimize(
             print(f"Complete! {current_state.craft_count} crafts")
             print(current_state.trace)
             for u, v, result in current_state.trace[::-1]:
-                print(f"{recipe_list.get_name(u)} + {recipe_list.get_name(v)} -> {recipe_list.get_name(result)}")
+                print(f"{recipe_list.get_name_capitalized(u)} + {recipe_list.get_name_capitalized(v)} -> {recipe_list.get_name_capitalized(result)}")
             break
 
         if frozenset(current_state.current) in processed:
@@ -185,8 +184,8 @@ def optimize(
 
 
 def main():
-    # optimize("Firebird", savefile_to_optimizer_recipes("../yui_optimizer_savefile.json"), 12)
-    optimize("1444980", savefile_to_optimizer_recipes("../yui_optimizer_savefile.json"), 128)
+    optimize("Firebird", savefile_to_optimizer_recipes("../yui_optimizer_savefile.json"), 12)
+    # optimize("1444980", savefile_to_optimizer_recipes("../yui_optimizer_savefile.json"), 128)
     pass
 
 

@@ -243,7 +243,7 @@ def combine_element_pairs():
 
 if __name__ == '__main__':
     # combine_element_pairs()
-    static_check_script('speedrun.txt')
+    static_check_script('speedrun2.txt')
     # best_recipes = load_best_recipes('expanded_recipes_depth_10.txt')
     # count = 0
     # for key in best_recipes:

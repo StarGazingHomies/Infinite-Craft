@@ -488,9 +488,9 @@ def filter_results(result: str) -> bool:
     return True
 
 
-def generate_single_best_recipe(output_file: str):
+def generate_single_best_recipe(input_file: str, output_file: str):
     try:
-        with open("persistent.json", "r", encoding="utf-8") as file:
+        with open(input_file, "r", encoding="utf-8") as file:
             last_state_json = json.load(file)
         best_recipes = last_state_json["BestRecipes"]
     except FileNotFoundError:
@@ -499,6 +499,8 @@ def generate_single_best_recipe(output_file: str):
     MAX_DEPTH = 11
     recipe_list = [[] for _ in range(MAX_DEPTH + 1)]
     for key, value in best_recipes.items():
+        if len(value[0]) > MAX_DEPTH:
+            break
         if filter_results(key):
             recipe_list[len(value[0])].append((key, value[0]))
 
@@ -506,33 +508,33 @@ def generate_single_best_recipe(output_file: str):
     print("Total recipes at each depth: ",
           [sum([len(x) for x in recipe_list[:i + 1]]) for i in range(1, len(recipe_list))])
 
-    # visited = set()
-    # count: int = 0
-    # with open(output_file, "w", encoding="utf-8") as f:
-    #     for i in range(MAX_DEPTH + 1):
-    #         for key, value in recipe_list[i]:
-    #             # if len(key) != 3 or not all([ord('a') <= ord(x) <= ord('z') for x in key.lower()]):
-    #             #     continue
-    #             # if key.lower() in visited:
-    #             #     continue
-    #             # visited.add(key.lower())
-    #             value_str = "\n".join([f"{x[0]} + {x[1]} -> {x[2]}" for x in value])
-    #             f.write(f"{count+1}: {key}:\n{value_str}\n\n")
-    #             count += 1
+    visited = set()
+    count: int = 0
     with open(output_file, "w", encoding="utf-8") as f:
-        for i in range(10):
+        for i in range(MAX_DEPTH + 1):
             for key, value in recipe_list[i]:
                 # if len(key) != 3 or not all([ord('a') <= ord(x) <= ord('z') for x in key.lower()]):
                 #     continue
                 # if key.lower() in visited:
                 #     continue
                 # visited.add(key.lower())
-                f.write(f"{key}\n")
+                value_str = "\n".join([f"{x[0]} + {x[1]} -> {x[2]}" for x in value])
+                f.write(f"{count+1}: {key}:\n{value_str}\n\n")
+                count += 1
+    # with open(output_file, "w", encoding="utf-8") as f:
+    #     for i in range(10):
+    #         for key, value in recipe_list[i]:
+    #             # if len(key) != 3 or not all([ord('a') <= ord(x) <= ord('z') for x in key.lower()]):
+    #             #     continue
+    #             # if key.lower() in visited:
+    #             #     continue
+    #             # visited.add(key.lower())
+    #             f.write(f"{key}\n")
 
 
-def generate_json(output_file: str):
+def generate_json(input_file: str, output_file: str):
     try:
-        with open("persistent.json", "r", encoding="utf-8") as file:
+        with open(input_file, "r", encoding="utf-8") as file:
             last_state_json = json.load(file)
         best_recipes = last_state_json["BestRecipes"]
     except FileNotFoundError:
@@ -650,11 +652,11 @@ if __name__ == '__main__':
     # asyncio.run(main())
 
     # merge_sql("Depth 12/recipes_depth12b.db")
-    # generate_single_best_recipe("best_recipes.txt")
+    generate_single_best_recipe("Depth 11/persistent_depth11_pass2.json", "best_recipes_depth_11_pass2.txt")
     # get_decent_recipe("Depth 11/persistent_depth11+1.json", ["1"])
-    # generate_json("all_best_recipes_depth_11.json")
+    generate_json("Depth 11/persistent_depth11_pass2.json", "all_best_recipes_depth_11_pass2.json")
     # add_to_recipe_handler("cache/items.json", "cache/recipes.json")
-    convert_to_savefile("infinitecraft_large_with_no_nothings.json", "cache/items.json", "cache/recipes.json")
+    # convert_to_savefile("infinitecraft_large_with_no_nothings.json", "cache/items.json", "cache/recipes.json")
     # cancers = parse_pbpbpb_cancer_list("top_cancer_a.txt")
     # print(cancers)
     # d = load_save_file("infinitecraft_main_old_save_58k.json")

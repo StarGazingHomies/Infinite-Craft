@@ -16,6 +16,8 @@ from util import int_to_pair, pair_to_int, DEFAULT_STARTING_ITEMS
 class OptimizerRecipeList:
     # Maps item name (lower case) to item id
     ids: bidict[str, int]
+    # Maps ID to item name (capitalized same as items)
+    id_capitalized: dict[int, str]
     # Forward recipe list
     # int_to_pair(ingredient1, ingredient2) -> result
     fwd: dict[int, int]
@@ -32,8 +34,10 @@ class OptimizerRecipeList:
         self.fwd = {}
         self.bwd = {}
         self.ids = bidict()
+        self.id_capitalized = {}
         for i, item in enumerate(items):
             self.ids[item.lower()] = i
+            self.id_capitalized[i] = item
         self.gen = None
 
     def __str__(self):
@@ -41,6 +45,9 @@ class OptimizerRecipeList:
 
     def get_name(self, item_id: int) -> str:
         return self.ids.inv[item_id]
+
+    def get_name_capitalized(self, item_id: int) -> str:
+        return self.id_capitalized[item_id]
 
     def get_id(self, name: str) -> int:
         return self.ids[name.lower()]

@@ -82,10 +82,15 @@ async def get_all_recipes(session: aiohttp.ClientSession, rh: recipe.RecipeHandl
     return recipes
 
 
-async def initialize_optimizer(session: aiohttp.ClientSession, rh: recipe.RecipeHandler, items: list[str]) -> OptimizerRecipeList:
-    # Get an extra generation
-    new_items = await request_extra_generation(session, rh, items)
-    items.extend(new_items)
+async def initialize_optimizer(
+        session: aiohttp.ClientSession,
+        rh: recipe.RecipeHandler,
+        items: list[str],
+        extra_generations: int = 1) -> OptimizerRecipeList:
+    # Get extra generations
+    for _ in range(extra_generations):
+        new_items = await request_extra_generation(session, rh, items)
+        items.extend(new_items)
     # Get all recipes
     recipes = await get_all_recipes(session, rh, items)
     recipe_list = OptimizerRecipeList(items)
@@ -95,6 +100,7 @@ async def initialize_optimizer(session: aiohttp.ClientSession, rh: recipe.Recipe
 
 
 async def main():
+    # Parse crafts file
     crafts = parse_craft_file("speedrun.txt")
     craft_results = [crafts[2] for crafts in crafts]
     target = craft_results[-1]
@@ -108,8 +114,9 @@ async def main():
         async with aiohttp.ClientSession() as session:
             async with session.get("https://neal.fun/infinite-craft/", headers=headers) as resp:
                 pass
-            optimizer_recipes = await initialize_optimizer(session, rh, final_items_for_current_recipe)
+            optimizer_recipes = await initialize_optimizer(session, rh, final_items_for_current_recipe, 0)
 
+    # Generate generations
     optimizer_recipes.generate_generations()
     print(optimizer_recipes)
     print(target)
