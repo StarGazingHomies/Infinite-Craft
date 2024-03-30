@@ -272,19 +272,6 @@ class RecipeHandler:
         local_result = self.get_local(a, b)
         # print(f"Local result: {a} + {b} -> {local_result}")
         if local_result and local_result != self.local_nothing_indication:
-            # TODO: Censoring - temporary, to see how much of a change it has
-            # print(local_result)
-            # if ("slave" in local_result.lower() or
-            #         "terroris" in local_result.lower() or
-            #         "hamas" in local_result.lower() or
-            #         local_result.lower() == 'jew' or
-            #         local_result.lower() == "rape" or
-            #         local_result.lower() == "rapist" or
-            #         local_result.lower() == "pedophile" or
-            #         local_result.lower() == "aids" or
-            #         "Bin Laden" in local_result):
-            #     return "Nothing"
-
             return local_result
 
         if self.local_only:

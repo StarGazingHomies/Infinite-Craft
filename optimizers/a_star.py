@@ -65,25 +65,41 @@ class AStarOptimizerState:
 
     calc_heuristic = calc_heuristic_complex
 
+    def get_children(self, u: int) -> set[int]:
+        # Gets the child crafts of the element
+        # (i.e. what elements are crafted from this element)
+        dependency_set = {u}
+        for ing1, ing2, result in self.trace[::-1]:
+            if ing1 in dependency_set or ing2 in dependency_set:
+                dependency_set.add(result)
+        return dependency_set
+
     def crafts(self, recipe_list: OptimizerRecipeList) -> list['AStarOptimizerState']:
         # Returns the possible crafts from the current state
         result = []
 
         # Craft highest generation item
         item_id = max(self.current, key=lambda x: recipe_list.get_generation_id(x))
+        item_children = self.get_children(item_id)
+        # print(self.pretty_str(recipe_list))
+        # print(f"{recipe_list.get_name(item_id)}: {[recipe_list.get_name(x) for x in item_children]}")
 
         cur_remaining = self.current.copy()
         cur_remaining.remove(item_id)
 
         for u, v in recipe_list.get_ingredients_id(item_id):
-            if u in self.crafted or v in self.crafted:
+            # TODO: Only check for circular dependencies...
+            # (This is incorrect and can miss some legitimate recipes)
+            if u in item_children or v in item_children:
                 continue
+
+            # Make new state
             new_items = cur_remaining.copy()
             new_crafted = self.crafted.copy()
             new_crafted.add(item_id)
-            if recipe_list.get_generation_id(u) != 0:
+            if recipe_list.get_generation_id(u) != 0 and u not in self.crafted:
                 new_items.add(u)
-            if recipe_list.get_generation_id(v) != 0:
+            if recipe_list.get_generation_id(v) != 0 and v not in self.crafted:
                 new_items.add(v)
             result.append(AStarOptimizerState(recipe_list,
                                               self.craft_count + 1,
@@ -169,8 +185,8 @@ def optimize(
 
 
 def main():
-    optimize("Firebird", savefile_to_optimizer_recipes("../yui_optimizer_savefile.json"), 12)
-    # optimize("1444980", savefile_to_optimizer_recipes("../yui_optimizer_savefile.json"), 128)
+    # optimize("Firebird", savefile_to_optimizer_recipes("../yui_optimizer_savefile.json"), 12)
+    optimize("1444980", savefile_to_optimizer_recipes("../yui_optimizer_savefile.json"), 128)
     pass
 
 

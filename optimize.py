@@ -13,8 +13,9 @@ from optimizers.optimizer_interface import OptimizerRecipeList
 # TODO: 2 types of optimization
 # 1. In-place: No new elements, only look at subsets of original that can be crafted
 # 2. Limited-depth: Allow new elements up to a certain deviation from the original path
-# 2a) iddfs (top-down)
-# 2b) A* (bottom-up, single destination)
+# Algorithms:
+# a) iddfs (top-down - low depth ONLY!)
+# b) A* (bottom-up, single destination)
 
 # The actual algorithms are implemented in the `optimizers/` folder
 # The interface is implemented in `optimizer_interface.py`
@@ -83,8 +84,8 @@ async def get_all_recipes(session: aiohttp.ClientSession, rh: recipe.RecipeHandl
 
 async def initialize_optimizer(session: aiohttp.ClientSession, rh: recipe.RecipeHandler, items: list[str]) -> OptimizerRecipeList:
     # Get an extra generation
-    # new_items = await request_extra_generation(session, rh, items)
-    # items.extend(new_items)
+    new_items = await request_extra_generation(session, rh, items)
+    items.extend(new_items)
     # Get all recipes
     recipes = await get_all_recipes(session, rh, items)
     recipe_list = OptimizerRecipeList(items)

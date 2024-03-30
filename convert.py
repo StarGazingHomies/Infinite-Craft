@@ -12,51 +12,6 @@ import bidict
 import recipe
 
 
-def result_key(a: str, b: str) -> str:
-    if a > b:
-        a, b = b, a
-    return a + "\t" + b
-
-
-def save(dictionary, file_name):
-    try:
-        json.dump(dictionary, open(file_name, 'w', encoding='utf-8'), ensure_ascii=False)
-    except FileNotFoundError:
-        print(f"Could not write to {file_name}! Trying to create cache folder...", flush=True)
-        try:
-            os.mkdir("cache")  # TODO: generalize
-            json.dump(dictionary, open(file_name, 'w', encoding='utf-8'), ensure_ascii=False)
-        except Exception as e:
-            print(f"Could not create folder or write to file: {e}", flush=True)
-            print(dictionary)
-    except Exception as e:
-        print(f"Unrecognized Error: {e}", flush=True)
-        print(dictionary)
-
-
-def best_recipes_to_json(recipe_file: str, output_file: str):
-    try:
-        with open(recipe_file, "r") as fin:
-            lines = fin.readlines()
-    except (IOError, ValueError):
-        print("Could not load recipe file", flush=True)
-        return
-
-    relevant_recipes = {}
-    for line in lines:
-        if '->' in line:
-            output = line.split("->")[1].strip()
-            inputs = line.split("->")[0].strip()
-            u, v = inputs.split("+")
-            if output in relevant_recipes:
-                if (u.strip(), v.strip()) not in relevant_recipes[output]:
-                    relevant_recipes[output].append((u.strip(), v.strip()))
-            else:
-                relevant_recipes[output] = [(u.strip(), v.strip())]
-
-    save(relevant_recipes, output_file)
-
-
 def remove_first_discoveries(savefile: str, new_savefile: str):
     with open(savefile, "r", encoding='utf-8') as f:
         data = json.load(f)
@@ -118,19 +73,6 @@ def count_recipes(file: str):
     with open(file, "r") as f:
         recipes = json.load(f)
     print(len(recipes))
-
-
-def load_analog_hors_json(file_name):
-    try:
-        db = json.load(open(file_name, 'r'))
-    except FileNotFoundError:
-        return {}
-
-    new_db = {}
-    for key, value in db.items():
-        for u, v in value:
-            new_db[result_key(u, v)] = key
-    return new_db
 
 
 def convert_to_result_first(file_name):
