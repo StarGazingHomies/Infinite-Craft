@@ -69,9 +69,16 @@ class AStarOptimizerState:
         # Gets all elements that depends on u
         # to check for circular dependencies
         dependency_set = {u}
-        for ing1, ing2, result in self.trace[::-1]:
-            if ing1 in dependency_set or ing2 in dependency_set:
-                dependency_set.add(result)
+        while True:
+            new_items = set()
+            for ing1, ing2, result in self.trace[::-1]:
+                if result in dependency_set:
+                    continue
+                if ing1 in dependency_set or ing2 in dependency_set:
+                    new_items.add(result)
+            if len(new_items) == 0:
+                break
+            dependency_set.update(new_items)
         return dependency_set
 
     def crafts(self, recipe_list: OptimizerRecipeList) -> list['AStarOptimizerState']:
@@ -140,7 +147,7 @@ def optimize(
     start = AStarOptimizerState(recipe_list, 0, {target_id})
 
     # Priority Queue
-    priority_queue: list[AStarOptimizerState] = []
+    priority_queue: list[tuple[float, AStarOptimizerState]] = []
     visited: dict[frozenset[int], int] = {}
     processed: set[frozenset[int]] = set()
     heapq.heappush(priority_queue, (start.heuristic, start))

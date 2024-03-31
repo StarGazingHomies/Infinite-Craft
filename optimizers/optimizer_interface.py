@@ -84,6 +84,7 @@ class OptimizerRecipeList:
 
     def generate_generations(self, init_items: list[str] = DEFAULT_STARTING_ITEMS) -> None:
         # O(V^2) time complexity
+        # TODO: Make this cleaner by not using a queue
         # Don't generate if it's already generated
         if self.gen_generated:
             return

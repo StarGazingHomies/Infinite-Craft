@@ -100,7 +100,7 @@ def dynamic_check_script(filename: str):
         ingredients, results = craft.split(' -> ')
         ing1, ing2 = ingredients.split(' + ')
         craft_count += 1
-        true_result = recipe_handler.combine(ing1.strip(), ing2.strip())
+        true_result = recipe_handler.get_local(ing1.strip(), ing2.strip())
         if true_result != results.strip():
             has_issues = True
             print(f"Craft {ing1} + {ing2} -> {results} is not correct. The correct response is {true_result}")
@@ -243,7 +243,7 @@ def combine_element_pairs():
 
 if __name__ == '__main__':
     # combine_element_pairs()
-    static_check_script('speedrun2.txt')
+    static_check_script('speedrun.txt')
     # best_recipes = load_best_recipes('expanded_recipes_depth_10.txt')
     # count = 0
     # for key in best_recipes:
@@ -255,7 +255,7 @@ if __name__ == '__main__':
     #         print(key)
     #         break
     # print(count)
-    # dynamic_check_script('periodic_table_speedrun_v1.7.4.txt')
+    dynamic_check_script('speedrun.txt')
     # add_element('periodic_table_speedrun_v1.6.8.txt',
     #                          "C",
     #             load_best_recipes('expanded_recipes_depth_10.txt'))

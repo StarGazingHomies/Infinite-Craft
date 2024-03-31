@@ -652,9 +652,9 @@ if __name__ == '__main__':
     # asyncio.run(main())
 
     # merge_sql("Depth 12/recipes_depth12b.db")
-    generate_single_best_recipe("Depth 11/persistent_depth11_pass2.json", "best_recipes_depth_11_pass2.txt")
-    # get_decent_recipe("Depth 11/persistent_depth11+1.json", ["1"])
-    generate_json("Depth 11/persistent_depth11_pass2.json", "all_best_recipes_depth_11_pass2.json")
+    # generate_single_best_recipe("Depth 11/persistent_depth11_pass2.json", "best_recipes_depth_11_pass2.txt")
+    get_decent_recipe("Depth 11/persistent_depth11+1.json", ["Indonesia"])
+    # generate_json("Depth 11/persistent_depth11_pass2.json", "all_best_recipes_depth_11_pass2.json")
     # add_to_recipe_handler("cache/items.json", "cache/recipes.json")
     # convert_to_savefile("infinitecraft_large_with_no_nothings.json", "cache/items.json", "cache/recipes.json")
     # cancers = parse_pbpbpb_cancer_list("top_cancer_a.txt")

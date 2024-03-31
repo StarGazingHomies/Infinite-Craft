@@ -7,6 +7,7 @@ import recipe
 import speedrun
 import util
 import optimizers.a_star as a_star
+import optimizers.simple_generational as simple_generational
 from optimizers.optimizer_interface import OptimizerRecipeList
 
 
@@ -71,14 +72,22 @@ async def request_extra_generation(session: aiohttp.ClientSession, rh: recipe.Re
 
 
 async def get_all_recipes(session: aiohttp.ClientSession, rh: recipe.RecipeHandler, items: list[str]):
+    total_recipe_count = len(items) * (len(items) + 1) // 2
+    current_recipe = 0
     # Only store valid recipes
     recipes = []
-    items_set = set(items)
+    items_set = set([item.lower() for item in items])
     for u, item1 in enumerate(items):
         for item2 in items[u:]:
             new_item = await rh.combine(session, item1, item2)
-            if new_item in items_set:
+            if new_item.lower() in items_set:
                 recipes.append((item1, item2, new_item))
+            current_recipe += 1
+
+            cur_precentage = int(current_recipe / total_recipe_count * 100)
+            last_precentage = int((current_recipe - 1) / total_recipe_count * 100)
+            if cur_precentage != last_precentage:
+                print(f"Progress: {cur_precentage}% ({current_recipe}/{total_recipe_count})")
     return recipes
 
 
@@ -88,9 +97,11 @@ async def initialize_optimizer(
         items: list[str],
         extra_generations: int = 1) -> OptimizerRecipeList:
     # Get extra generations
-    for _ in range(extra_generations):
+    for i in range(extra_generations):
         new_items = await request_extra_generation(session, rh, items)
         items.extend(new_items)
+        print(f"Generation {i + 1} complete with {len(new_items)} new items.")
+
     # Get all recipes
     recipes = await get_all_recipes(session, rh, items)
     recipe_list = OptimizerRecipeList(items)
@@ -114,10 +125,15 @@ async def main():
         async with aiohttp.ClientSession() as session:
             async with session.get("https://neal.fun/infinite-craft/", headers=headers) as resp:
                 pass
-            optimizer_recipes = await initialize_optimizer(session, rh, final_items_for_current_recipe, 0)
+            optimizer_recipes = await initialize_optimizer(session, rh, final_items_for_current_recipe, 1)
 
     # Generate generations
     optimizer_recipes.generate_generations()
+    print(optimizer_recipes.gen)
+    # print(optimizer_recipes.bwd)
+    for result, recipes in optimizer_recipes.bwd.items():
+        for i, j in recipes:
+            print(f"{optimizer_recipes.get_name_capitalized(i)} + {optimizer_recipes.get_name_capitalized(j)} -> {optimizer_recipes.get_name_capitalized(result)}")
     print(optimizer_recipes)
     print(target)
     print(optimizer_recipes.get_id(target))

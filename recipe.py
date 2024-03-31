@@ -54,17 +54,17 @@ class RecipeHandler:
     closed: bool = False
 
     last_request: float = 0
-    request_cooldown: float = 0.5  # 0.5s is safe for this API
+    request_cooldown: float = 0.3                # 0.5s is safe for this API
     sleep_time: float = 1.0
     sleep_default: float = 1.0
     retry_exponent: float = 2.0
     local_only: bool = False
-    trust_cache_nothing: bool = True  # Trust the local cache for "Nothing" results
-    trust_first_run_nothing: bool = False  # Save as "Nothing" in the first run
+    trust_cache_nothing: bool = True             # Trust the local cache for "Nothing" results
+    trust_first_run_nothing: bool = False        # Save as "Nothing" in the first run
     local_nothing_indication: str = "Nothing\t"  # Indication of untrusted "Nothing" in the local cache
-    nothing_verification: int = 3  # Verify "Nothing" n times with the API
-    nothing_cooldown: float = 5.0  # Cooldown between "Nothing" verifications
-    connection_timeout: float = 5.0  # Connection timeout
+    nothing_verification: int = 3                # Verify "Nothing" n times with the API
+    nothing_cooldown: float = 5.0                # Cooldown between "Nothing" verifications
+    connection_timeout: float = 10.0             # Connection timeout
 
     headers: dict[str, str] = {}
 
@@ -349,8 +349,8 @@ async def main():
     #     for l2 in letters:
     #         letters2.append(l1 + l2)
     #
-    # rh = RecipeHandler([])
-    # print(rh.get_crafts("Periodic"))
+    rh = RecipeHandler([])
+    print(rh.get_crafts("Paris"))
     # letter_recipes = {}
     # for two_letter_combo in letters2:
     #     uses = r.get_uses(two_letter_combo)
