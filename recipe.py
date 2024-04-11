@@ -2,6 +2,7 @@ import atexit
 import json
 import math
 import os
+import random
 import sys
 import time
 import traceback
@@ -12,6 +13,7 @@ import aiohttp
 from bidict import bidict
 import sqlite3
 
+import util
 from util import int_to_pair, pair_to_int, WORD_COMBINE_CHAR_LIMIT
 
 
@@ -54,7 +56,7 @@ class RecipeHandler:
     closed: bool = False
 
     last_request: float = 0
-    request_cooldown: float = 0.3                # 0.5s is safe for this API
+    request_cooldown: float = 0.5                # 0.5s is safe for this API
     sleep_time: float = 1.0
     sleep_default: float = 1.0
     retry_exponent: float = 2.0
@@ -65,6 +67,8 @@ class RecipeHandler:
     nothing_verification: int = 3                # Verify "Nothing" n times with the API
     nothing_cooldown: float = 5.0                # Cooldown between "Nothing" verifications
     connection_timeout: float = 10.0             # Connection timeout
+
+    print_new_recipes: bool = True
 
     headers: dict[str, str] = {}
 
@@ -158,6 +162,11 @@ class RecipeHandler:
         if a > b:
             a, b = b, a
 
+        a = util.to_start_case(a)
+        b = util.to_start_case(b)
+        self.add_starting_item(a, "", False)
+        self.add_starting_item(b, "", False)
+
         # print(f"Adding: {a} + {b} -> {result}")
         cur = self.db.cursor()
         cur.execute(insert_recipe, (a, b, result))
@@ -182,7 +191,8 @@ class RecipeHandler:
         except KeyError:
             new = False
 
-        print(f"New Recipe: {a} + {b} -> {result}")
+        if self.print_new_recipes:
+            print(f"New Recipe: {a} + {b} -> {result}")
         if new:
             print(f"FIRST DISCOVERY: {a} + {b} -> {result}")
 
@@ -200,6 +210,9 @@ class RecipeHandler:
     def get_local(self, a: str, b: str) -> Optional[str]:
         if a > b:
             a, b = b, a
+        a = util.to_start_case(a)
+        b = util.to_start_case(b)
+
         cur = self.db.cursor()
         cur.execute(query_recipe, (a, b))
         result = cur.fetchone()
@@ -288,7 +301,8 @@ class RecipeHandler:
             # Increases time taken on requests but should be worth it.
             # Also note that this can't be asynchronous due to all the optimizations I made assuming a search order
             time.sleep(self.nothing_cooldown)
-            print("Re-requesting Nothing result...", flush=True)
+            if self.print_new_recipes:
+                print("Re-requesting Nothing result...", flush=True)
 
             r = await self.request_pair(session, a, b)
 
@@ -319,11 +333,12 @@ class RecipeHandler:
                     # print(resp.status)
                     if resp.status == 200:
                         self.sleep_time = self.sleep_default
-                        return await resp.json()
+                        return await resp.json(content_type=None)
                     else:
                         print(f"Request failed with status {resp.status}", file=sys.stderr)
                         if resp.status == 500:
                             print(f"Internal Server Error when combining {a} + {b}", file=sys.stderr)
+                            return {"result": "Nothing\t", "emoji": "", "isNew": False}
 
                         time.sleep(self.sleep_time)
                         self.sleep_time *= self.retry_exponent
@@ -338,6 +353,18 @@ class RecipeHandler:
 
 
 # Testing code / temporary code
+async def random_walk(rh: RecipeHandler, session: aiohttp.ClientSession, steps: int):
+    current_items = set(util.DEFAULT_STARTING_ITEMS)
+    for i in range(steps):
+        a = list(current_items)[random.randint(0, len(current_items) - 1)]
+        b = list(current_items)[random.randint(0, len(current_items) - 1)]
+        result = await rh.combine(session, a, b)
+        if result != "Nothing":
+            current_items.add(result)
+        print(f"Step {i+1}: {a} + {b} -> {result}")
+    print(f"{len(current_items)} items: {current_items}")
+
+
 async def main():
     pass
     # letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J",
@@ -350,7 +377,13 @@ async def main():
     #         letters2.append(l1 + l2)
     #
     rh = RecipeHandler([])
-    print(rh.get_crafts("Paris"))
+    # headers = load_json("headers.json")["default"]
+    # async with aiohttp.ClientSession() as session:
+    #     async with session.get("https://neal.fun/infinite-craft/", headers=headers) as resp:
+    #         pass
+    #     await random_walk(rh, session, 5000)
+    print(rh.get_crafts("20"))
+
     # letter_recipes = {}
     # for two_letter_combo in letters2:
     #     uses = r.get_uses(two_letter_combo)

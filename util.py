@@ -17,3 +17,13 @@ def int_to_pair(n: int) -> tuple[int, int]:
     j = math.floor(((8 * n + 1) ** 0.5 - 1) / 2)
     i = n - (j * (j + 1)) // 2
     return i, j
+
+
+def to_start_case(s: str) -> str:
+    new_str = ""
+    for i in range(len(s)):
+        if i == 0 or s[i - 1] == " ":
+            new_str += s[i].upper()
+        else:
+            new_str += s[i].lower()
+    return new_str
