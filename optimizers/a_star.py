@@ -16,7 +16,7 @@ class AStarOptimizerState:
     craft_count: int
     current: set[int]                      # Crafts to do
     crafted: set[int]                      # Crafts already done
-    trace: list[tuple[int, int, int]]      # The trace of the state, for giving the final recipe
+    trace: list[tuple[int, int, int]]      # The steps to trace back the recipe
     heuristic: float                       # Heuristic value
 
     def __init__(self, recipe_list: OptimizerRecipeList, craft_count: int, current: set[int], crafted=None, trace=None):
@@ -36,7 +36,7 @@ class AStarOptimizerState:
     def pretty_str(self, recipe_list: OptimizerRecipeList):
         todo_crafts = [f"{recipe_list.get_name(x)}" for x in self.current]
         done_steps = "\n".join(
-            [f"{recipe_list.get_name(u)} + {recipe_list.get_name(v)} -> {recipe_list.get_name(result)}"
+            [f"{recipe_list.get_name_capitalized(u)} + {recipe_list.get_name_capitalized(v)} -> {recipe_list.get_name_capitalized(result)}"
              for u, v, result in self.trace])
         return f"State with {self.craft_count} crafts and {todo_crafts} remaining. Heuristic is {self.heuristic}\n" \
                f"Steps: \n{done_steps}"
@@ -81,6 +81,13 @@ class AStarOptimizerState:
             dependency_set.update(new_items)
         return dependency_set
 
+    def get_deviations(self, initial_crafts: list[int]) -> int:
+        # Returns the number of deviations from the initial crafts
+        return len((self.current | self.crafted).difference(initial_crafts))
+        # Note that currently, the initial_crafts are nicely the first items in terms of ID,
+        # so passing in the initial_crafts is not necessary. However, just in case
+        # something changes, this will be kept.
+
     def crafts(self, recipe_list: OptimizerRecipeList) -> list['AStarOptimizerState']:
         # Returns the possible crafts from the current state
         result = []
@@ -93,6 +100,8 @@ class AStarOptimizerState:
 
         cur_remaining = self.current.copy()
         cur_remaining.remove(item_id)
+        # print(f"Expanding element {recipe_list.get_name_capitalized(item_id)}")
+        # print(f"{[recipe_list.get_name_capitalized(x) for x in item_children]} are dependent on {recipe_list.get_name_capitalized(item_id)}.")
 
         for u, v in recipe_list.get_ingredients_id(item_id):
             # Check for circular dependencies
@@ -107,6 +116,7 @@ class AStarOptimizerState:
                 new_items.add(u)
             if recipe_list.get_generation_id(v) != 0 and v not in self.crafted:
                 new_items.add(v)
+            # print(f"Crafting {recipe_list.get_name_capitalized(u)} + {recipe_list.get_name_capitalized(v)} -> {recipe_list.get_name_capitalized(item_id)}")
             result.append(AStarOptimizerState(recipe_list,
                                               self.craft_count + 1,
                                               new_items,
@@ -125,26 +135,26 @@ class AStarOptimizerState:
 
 
 def optimize(
-        target: str,
+        targets: list[str],
         recipe_list: OptimizerRecipeList,
         upper_bound: int,
-        initial_crafts: list[str] = None,
-        max_deviations: int = 128):
-    # Parsing args - TODO: implement deviation counting
+        initial_crafts: list[int] = None,
+        max_deviations: int = 128) -> list[AStarOptimizerState]:
+    # Parsing args
     check_deviations = False
-    if initial_crafts and max_deviations > 0:
+    if initial_crafts and max_deviations >= 0:
         check_deviations = True
 
     # Generate generations
     recipe_list.generate_generations()
 
-    target_id = recipe_list.get_id(target)
-    if target_id is None:
-        raise ValueError(f"Target {target} not found in recipe list")
+    target_ids = [recipe_list.get_id(target) for target in targets]
+    for i, target_id in enumerate(target_ids):
+        if target_id is None:
+            raise ValueError(f"Target {targets[i]}not found in recipe list!")
 
     # Initialize the starting state
-    target_gen = recipe_list.get_generation_id(target_id)
-    start = AStarOptimizerState(recipe_list, 0, {target_id})
+    start = AStarOptimizerState(recipe_list, 0, set(target_ids))
 
     # Priority Queue
     priority_queue: list[tuple[float, AStarOptimizerState]] = []
@@ -152,21 +162,46 @@ def optimize(
     processed: set[frozenset[int]] = set()
     heapq.heappush(priority_queue, (start.heuristic, start))
 
+    # Stats
+    processed_states = 0
+    min_heuristic = 0
+    final_states: list[AStarOptimizerState] = []
+    completed = False
+    completed_steps = 0
+
     # Main loop
     while len(priority_queue) > 0:
         _, current_state = heapq.heappop(priority_queue)
         # print(f"Current: {current_state.current}, {current_state.craft_count}, {current_state.heuristic}")
+        processed_states += 1
+        if current_state.heuristic > min_heuristic:
+            min_heuristic = current_state.heuristic
+            print(f"Processed: {processed_states}, Queue length: {len(priority_queue)}, Min heuristic in queue: {min_heuristic}")
+        if processed_states % 10000 == 0:
+            print(f"Processed: {processed_states}, Queue length: {len(priority_queue)}, Min heuristic in queue: {min_heuristic}")
 
+        # Save all optimal-steps states
         if current_state.is_complete():
-            print(f"Complete! {current_state.craft_count} crafts")
-            print(current_state.trace)
-            for u, v, result in current_state.trace[::-1]:
-                print(f"{recipe_list.get_name_capitalized(u)} + {recipe_list.get_name_capitalized(v)} -> {recipe_list.get_name_capitalized(result)}")
-            break
+            final_states.append(current_state)
+            completed_steps = current_state.craft_count
+            completed = True
+            continue
+
+        if completed:
+            if current_state.craft_count > completed_steps:
+                break
+            if current_state.is_complete():
+                final_states.append(current_state)
+            continue
 
         if frozenset(current_state.current) in processed:
             continue
         processed.add(frozenset(current_state.current))
+
+        # print("Current state: ", current_state.pretty_str(recipe_list))
+        # print("Current state:", current_state)
+        # print("Queue length: ", len(priority_queue))
+        # input()
 
         # print(f"Current: {current_state}")
         next_state: AStarOptimizerState
@@ -177,6 +212,14 @@ def optimize(
             # Check if next states exceeds upper bound (by existing recipe)
             if next_state.heuristic > upper_bound:
                 continue
+
+            # Check if the next state exceeds deviation limit
+            # print(next_state.current, next_state.crafted, initial_crafts, next_state.get_deviations(initial_crafts))
+            deviations = next_state.get_deviations(initial_crafts)
+            if check_deviations and deviations > max_deviations:
+                continue
+
+            # Check if the next state is already visited
             current_set = frozenset(next_state.current)
             if current_set in visited:
                 if visited[current_set] <= next_state.craft_count:
@@ -184,10 +227,32 @@ def optimize(
             visited[current_set] = next_state.craft_count
             heapq.heappush(priority_queue, (next_state.heuristic, next_state))
 
-        # print("Current state: ", current_state.pretty_str(recipe_list))
-        print("Current state:", current_state)
-        print("Queue length: ", len(priority_queue))
-        # input()
+    print(f"Complete! {completed_steps} crafts")
+    # print(final_state.trace)
+    # for u, v, result in final_state.trace[::-1]:
+    #     print(
+    #         f"{recipe_list.get_name_capitalized(u)} + {recipe_list.get_name_capitalized(v)} -> {recipe_list.get_name_capitalized(result)}")
+
+    # Post-processing - make sure the ordering is correct
+    for final_state in final_states:
+        crafted = {0, 1, 2, 3}
+        steps_copy = final_state.trace.copy()
+        new_steps = []
+        while len(steps_copy) > 0:
+            for u, v, result in steps_copy:
+                # print(u, v, result, u in crafted, v in crafted, result in crafted)
+                if u in crafted and v in crafted:
+                    crafted.add(result)
+                    # print("Crafted", recipe_list.get_name_capitalized(result))
+                    steps_copy.remove((u, v, result))
+                    new_steps.append((u, v, result))
+
+        for u, v, result in new_steps:
+            print(
+                f"{recipe_list.get_name_capitalized(u)} + {recipe_list.get_name_capitalized(v)} -> {recipe_list.get_name_capitalized(result)}")
+        print("\n---------------------------------------------------\n")
+
+    return final_states
 
 
 def main():

@@ -71,6 +71,16 @@ def optimize(
                 else:
                     cost_v = recipe_list.get_generation_id(v)
 
+            # if recipe_list.get_generation_id(u) is None:
+            #     cost_u = nonexistent_generation
+            # elif u not in done and u not in todo:
+            #     cost_u = recipe_list.get_generation_id(u)
+            #
+            # if recipe_list.get_generation_id(v) is None:
+            #     cost_v = nonexistent_generation
+            # elif v not in done and v not in todo:
+            #     cost_v = recipe_list.get_generation_id(v)
+
             this_cost = max(cost_u, cost_v)  # - 1 / (min(cost_u, cost_v) + 1)
 
             if this_cost < min_cost:
@@ -122,18 +132,18 @@ def savefile_to_optimizer_recipes_oopsie(file: str) -> OptimizerRecipeList:
 
     for result, recipe_list in recipes_raw.items():
         for recipe in recipe_list:
-            if recipe[0]['text'] in {"Water", "Fire", "Earth", "Wind"} and recipe[1]['text'] in {"Water", "Fire", "Earth", "Wind"}:
-                # print(f"Ignored recipe {recipe[0]['text']} + {recipe[1]['text']}")
-                continue
+            # if recipe[0]['text'] in {"Water", "Fire", "Earth", "Wind"} and recipe[1]['text'] in {"Water", "Fire", "Earth", "Wind"}:
+            #     # print(f"Ignored recipe {recipe[0]['text']} + {recipe[1]['text']}")
+            #     continue
             optimizer.add_recipe_name(result, recipe[0]['text'], recipe[1]['text'])
 
     return optimizer
 
 
 def main():
-    # optimize("Firebird", savefile_to_optimizer_recipes_oopsie("../yui_optimizer_savefile.json"), 1000)
-    # optimize("1444980", savefile_to_optimizer_recipes_oopsie("../yui_optimizer_savefile.json"), 1000)
-    optimize("Chlorosulfuric Acid", savefile_to_optimizer_recipes("../yui_optimizer_missing.json"), 1000)
+    # optimize("Firebird", savefile_to_optimizer_recipes("../yui_optimizer_savefile.json"), 1000)
+    optimize("Lake", savefile_to_optimizer_recipes("../Savefiles/Other People/infinitecraft_14.json"), 1000)
+    # optimize("Chlorosulfuric Acid", savefile_to_optimizer_recipes("../yui_optimizer_missing.json"), 1000)
     pass
 
 

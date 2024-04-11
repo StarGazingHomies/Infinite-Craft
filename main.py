@@ -48,9 +48,10 @@ for l1 in letters:
 
 # init_state = tuple(list(init_state) + elements + ["Periodic Table",])
 # init_state = tuple(list(init_state) + letters + letters2)
-init_state = tuple(list(init_state) + speedrun_current_words)
+# init_state = tuple(list(init_state) + letters)
+# init_state = tuple(list(init_state) + speedrun_current_words)
 recipe_handler = recipe.RecipeHandler(init_state)
-depth_limit = 7
+depth_limit = 10
 extra_depth = 0
 
 best_recipes: dict[str, list[list[tuple[str, str, str]]]] = dict()

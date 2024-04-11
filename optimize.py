@@ -22,44 +22,6 @@ from optimizers.optimizer_interface import OptimizerRecipeList
 # The interface is implemented in `optimizer_interface.py`
 
 
-def parse_craft_file(filename: str):
-    with open(filename, 'r') as file:
-        crafts_file = file.readlines()
-
-    # Format: ... + ... -> ...
-    current = {"Earth": 0,
-               "Fire": 0,
-               "Water": 0,
-               "Wind": 0}
-    craft_count = 0
-    crafts: list[tuple[str, str, str]] = []
-    for i, craft in enumerate(crafts_file):
-        # print(craft)
-        if craft == '\n' or craft[0] == "#":
-            continue
-        ingredients, results = craft.split(' -> ')
-        ing1, ing2 = ingredients.split(' + ')
-        crafts.append((ing1.strip(), ing2.strip(), results.strip()))
-        craft_count += 1
-
-        if ing1.strip() not in current:
-            print(f"Ingredient {ing1.strip()} not found in line {i + 1}")
-        else:
-            current[ing1.strip()] += 1
-
-        if ing2.strip() not in current:
-            print(f"Ingredient {ing2.strip()} not found in line {i + 1}")
-        else:
-            current[ing2.strip()] += 1
-
-        if results.strip() in current:
-            print(f"Result {results.strip()} already exists in line {i + 1}")
-
-        current[results.strip()] = 0
-        # print(f'{ing1} + {ing2} -> {results}')
-    return crafts
-
-
 async def request_extra_generation(session: aiohttp.ClientSession, rh: recipe.RecipeHandler, current: list[str]):
     # Only one generation for now, maybe iddfs or recursion later
     new_items = set()
@@ -87,7 +49,7 @@ async def get_all_recipes(session: aiohttp.ClientSession, rh: recipe.RecipeHandl
             cur_precentage = int(current_recipe / total_recipe_count * 100)
             last_precentage = int((current_recipe - 1) / total_recipe_count * 100)
             if cur_precentage != last_precentage:
-                print(f"Progress: {cur_precentage}% ({current_recipe}/{total_recipe_count})")
+                print(f"Recipe Progress: {cur_precentage}% ({current_recipe}/{total_recipe_count})")
     return recipes
 
 
@@ -112,7 +74,13 @@ async def initialize_optimizer(
 
 async def main():
     # Parse crafts file
-    crafts = parse_craft_file("speedrun.txt")
+    crafts = speedrun.parse_craft_file("speedrun.txt")
+    # crafts2 = parse_craft_file("speedrun.txt")
+    #
+    # print(f"Added: \n{'\n'.join(set([str(craft) for craft in crafts]).difference(set([str(craft) for craft in crafts2])))}")
+    # print(f"Removed: \n{'\n'.join(set([str(craft) for craft in crafts2]).difference(set([str(craft) for craft in crafts])))}")
+    # return
+
     craft_results = [crafts[2] for crafts in crafts]
     target = craft_results[-1]
     max_crafts = len(crafts)
@@ -121,7 +89,7 @@ async def main():
 
     # Request and build items cache
     headers = recipe.load_json("headers.json")["default"]
-    with recipe.RecipeHandler(util.DEFAULT_STARTING_ITEMS) as rh:
+    with recipe.RecipeHandler(final_items_for_current_recipe) as rh:
         async with aiohttp.ClientSession() as session:
             async with session.get("https://neal.fun/infinite-craft/", headers=headers) as resp:
                 pass
@@ -129,18 +97,26 @@ async def main():
 
     # Generate generations
     optimizer_recipes.generate_generations()
-    print(optimizer_recipes.gen)
+    # print(optimizer_recipes.gen)
     # print(optimizer_recipes.bwd)
-    for result, recipes in optimizer_recipes.bwd.items():
-        for i, j in recipes:
-            print(f"{optimizer_recipes.get_name_capitalized(i)} + {optimizer_recipes.get_name_capitalized(j)} -> {optimizer_recipes.get_name_capitalized(result)}")
+    # for result, recipes in optimizer_recipes.bwd.items():
+    #     for i, j in recipes:
+    #         print(f"{optimizer_recipes.get_name_capitalized(i)} + {optimizer_recipes.get_name_capitalized(j)} -> {optimizer_recipes.get_name_capitalized(result)}")
     print(optimizer_recipes)
     print(target)
     print(optimizer_recipes.get_id(target))
     print(optimizer_recipes.get_generation_id(optimizer_recipes.get_id(target)))
 
+    # Initial crafts for deviation checking
+    # print(list(util.DEFAULT_STARTING_ITEMS) + craft_results)
+    initial_crafts = [optimizer_recipes.get_id(item) for item in list(util.DEFAULT_STARTING_ITEMS) + craft_results]
+    # print(initial_crafts)
+
     # Run the optimizer
-    a_star.optimize(target, optimizer_recipes, max_crafts)
+    a_star.optimize([target], optimizer_recipes, max_crafts, initial_crafts, 2)
+    # a_star.optimize([chr(i + ord('A')) for i in range(26)], optimizer_recipes, max_crafts, initial_crafts, 2)
+    # a_star.optimize(["fromcharcode", "#fromcharcode"], optimizer_recipes, max_crafts, initial_crafts, 2)
+    # simple_generational.optimize(target, optimizer_recipes, max_crafts)
 
 
 if __name__ == '__main__':

@@ -3,6 +3,7 @@ import sys
 import time
 import traceback
 import urllib
+from typing import Optional
 from urllib.parse import quote_plus
 from urllib.request import Request, urlopen
 
@@ -25,23 +26,49 @@ elements = ["Hydrogen", "Helium", "Lithium", "Beryllium", "Boron", "Carbon", "Ni
 recipe_handler = None
 
 
-def static_check_script(filename: str):
+def parse_craft_file(filename: str, forced_delimiter: Optional[str] = None) -> list[tuple[str, str, str]]:
     with open(filename, 'r') as file:
         crafts = file.readlines()
 
-    # Format: ... + ... -> ...
-    current = {"Earth": 0,
-               "Fire": 0,
-               "Water": 0,
-               "Wind": 0}
+    # Format: ... + ... [delimiter] ...
     craft_count = 0
+    crafts_parsed: list[tuple[str, str, str]] = []
     for i, craft in enumerate(crafts):
         # print(craft)
-        if craft == '\n' or craft[0] == "#":
+        if craft == '\n':
             continue
-        ingredients, results = craft.split(' -> ')
+        craft = craft.split(" //")[0].strip()
+
+        # Automatic delimiter detection
+        delimiter = " = "
+        if forced_delimiter:
+            delimiter = forced_delimiter
+        else:
+            if " = " in craft:
+                pass
+            elif " -> " in craft:
+                delimiter = " -> "
+            else:
+                print(f"Delimiter not found in line {i + 1}")
+                continue
+        ingredients, results = craft.split(delimiter)
         ing1, ing2 = ingredients.split(' + ')
+        ing1, ing2, results = ing1.strip().lower(), ing2.strip().lower(), results.strip().lower()
+        crafts_parsed.append((ing1, ing2, results))
         craft_count += 1
+    return crafts_parsed
+
+
+def static_check_script(filename: str):
+    crafts = parse_craft_file(filename)
+
+    # Format: ... + ... -> ...
+    current = {"earth": 0,
+               "fire": 0,
+               "water": 0,
+               "wind": 0}
+    for i, craft in enumerate(crafts):
+        ing1, ing2, result = craft
         if ing1.strip() not in current:
             print(f"Ingredient {ing1.strip()} not found in line {i + 1}")
         else:
@@ -50,11 +77,10 @@ def static_check_script(filename: str):
             print(f"Ingredient {ing2.strip()} not found in line {i + 1}")
         else:
             current[ing2.strip()] += 1
-        if results.strip() in current:
-            print(f"Result {results.strip()} already exists in line {i + 1}")
+        if result.strip() in current:
+            print(f"Result {result.strip()} already exists in line {i + 1}")
 
-        current[results.strip()] = 0
-        # print(f'{ing1} + {ing2} -> {results}')
+        current[result.strip()] = 0
     element_count = 0
     elements_copy = elements.copy()
     for ingredient, value in current.items():
@@ -63,17 +89,17 @@ def static_check_script(filename: str):
         if ingredient in elements_copy:
             element_count += 1
             elements_copy.remove(ingredient)
-    print("\n".join([str(elements_copy[i * 10:i * 10 + 10]) for i in range(11)]))
-    print(craft_count)
+    # print("\n".join([str(elements_copy[i * 10:i * 10 + 10]) for i in range(11)]))
+    print(len(crafts))
     # print(current)
-    current_list = list(current.items())
-    current_list.sort(key=lambda x: x[1], reverse=True)
+    # current_list = list(current.items())
+    # current_list.sort(key=lambda x: x[1], reverse=True)
     # for k, v in current_list:
     #     if k in elements:
     #         continue
     #     print(f"{k}: {v}")
     # print(tuple(current.keys()))
-    print(element_count)
+    # print(element_count)
     return current
 
 
@@ -82,8 +108,7 @@ def dynamic_check_script(filename: str):
     if recipe_handler is None:
         recipe_handler = recipe.RecipeHandler(("Water", "Fire", "Wind", "Earth"))
 
-    with open(filename, 'r', encoding='utf-8') as file:
-        crafts = file.readlines()
+    crafts = parse_craft_file(filename)
 
     # Format: ... + ... -> ...
     current = {"Earth": 0,
@@ -93,17 +118,11 @@ def dynamic_check_script(filename: str):
     craft_count = 0
     has_issues = False
     for i, craft in enumerate(crafts):
-        # print(craft)
-        if craft == '\n' or craft[0] == "#":
-            continue
-        craft = craft.replace("'", '’')
-        ingredients, results = craft.split(' -> ')
-        ing1, ing2 = ingredients.split(' + ')
-        craft_count += 1
+        ing1, ing2, result = craft
         true_result = recipe_handler.get_local(ing1.strip(), ing2.strip())
-        if true_result != results.strip():
+        if true_result != result.strip():
             has_issues = True
-            print(f"Craft {ing1} + {ing2} -> {results} is not correct. The correct response is {true_result}")
+            print(f"Craft {ing1} + {ing2} -> {result} is not correct. The correct response is {true_result}")
 
     if not has_issues:
         print("All recipes are correct!")
@@ -241,9 +260,28 @@ def combine_element_pairs():
         print(f"{e} can't be made in 1 step")
 
 
+def clean(filename: str, out_filename: str):
+    with open(filename, 'r', encoding='utf-8') as file:
+        lines = file.readlines()
+
+    new_lines = []
+    for line in lines:
+        new_line = ""
+        for char in line:
+            if 32 <= ord(char) < 128:
+                new_line += char
+        new_line = new_line.strip()
+        new_lines.append(new_line)
+
+    with open(out_filename, 'w') as file:
+        file.writelines("\n".join(new_lines))
+
+
 if __name__ == '__main__':
+    pass
     # combine_element_pairs()
     static_check_script('speedrun.txt')
+    # static_check_script('speedrun_hashtag_fromcharcode.txt')
     # best_recipes = load_best_recipes('expanded_recipes_depth_10.txt')
     # count = 0
     # for key in best_recipes:
@@ -255,7 +293,8 @@ if __name__ == '__main__':
     #         print(key)
     #         break
     # print(count)
-    dynamic_check_script('speedrun.txt')
-    # add_element('periodic_table_speedrun_v1.6.8.txt',
-    #                          "C",
+    # dynamic_check_script('speedrun3.txt')
+    # clean("speedrun.txt", "speedrun3.txt")
+    # add_element('speedrun.txt',
+    #                          "Bottle",
     #             load_best_recipes('expanded_recipes_depth_10.txt'))

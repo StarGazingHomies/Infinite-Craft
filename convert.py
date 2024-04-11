@@ -10,6 +10,7 @@ import aiohttp
 import bidict
 
 import recipe
+import util
 
 
 def remove_first_discoveries(savefile: str, new_savefile: str):
@@ -515,6 +516,8 @@ def generate_single_best_recipe(input_file: str, output_file: str):
             for key, value in recipe_list[i]:
                 # if len(key) != 3 or not all([ord('a') <= ord(x) <= ord('z') for x in key.lower()]):
                 #     continue
+                if len(key) != 1 or not key[0].isalpha():
+                    continue
                 # if key.lower() in visited:
                 #     continue
                 # visited.add(key.lower())
@@ -645,15 +648,194 @@ async def main():
         #             print(f"Found {combined} with {u} ({u2}) + {v} ({v2}) -> {result}")
 
 
+def merge_savefile(file1: str, file2: str, output_file: str):
+    with open(file1, "r", encoding="utf-8") as f:
+        data1 = json.load(f)
+    with open(file2, "r", encoding="utf-8") as f:
+        data2 = json.load(f)
+
+    new_data = {"elements": [], "recipes": {}, "darkMode": True}
+    new_elements: dict[str, dict] = {}
+    for i in data1["elements"]:
+        if i["text"] not in new_elements:
+            new_elements[i["text"]] = i
+        else:
+            new_elements[i["text"]]["discovered"] = new_elements[i["text"]]["discovered"] or i["discovered"]
+    for i in data2["elements"]:
+        if i["text"] not in new_elements:
+            new_elements[i["text"]] = i
+        else:
+            new_elements[i["text"]]["discovered"] = new_elements[i["text"]]["discovered"] or i["discovered"]
+
+    new_data["elements"] = list(new_elements.values())
+
+    new_recipes = {}
+    for key, value in data1["recipes"].items():
+        if key not in new_recipes:
+            new_recipes[key] = value
+        else:
+            new_recipes[key].extend(value)
+    for key, value in data2["recipes"].items():
+        if key not in new_recipes:
+            new_recipes[key] = value
+        else:
+            new_recipes[key].extend(value)
+
+    new_data["recipes"] = new_recipes
+
+    with open(output_file, "w", encoding="utf-8") as f:
+        json.dump(new_data, f, ensure_ascii=False)
+
+
+def find_minus_claus():
+    rh = recipe.RecipeHandler([])
+    items_cur = rh.db.cursor()
+    items_cur.execute("SELECT * FROM items")
+    nothing_data = {}
+    for i in items_cur:
+        nothing_data[i[2]] = [0, 0]
+
+    recipes_cur = rh.db.cursor()
+    recipes_cur.execute("""
+    SELECT ing1.name, ing2.name, result.name
+    FROM recipes
+    JOIN items   AS ing1   ON ing1.id = recipes.ingredient1_id
+    JOIN items   AS ing2   ON ing2.id = recipes.ingredient2_id
+    JOIN items   AS result ON result.id = recipes.result_id
+    """)
+    recipes = {}
+    recipes_count = 0
+    for r in recipes_cur:
+        recipes_count += 1
+        if recipes_count % 100000 == 0:
+            print(f"Processed {recipes_count} recipes")
+        is_nothing = False
+        if r[2] == "Nothing" or r[2] == "Nothing\t":
+            is_nothing = True
+        if r[0] in nothing_data:
+            nothing_data[r[0]][1] += 1
+            if is_nothing:
+                nothing_data[r[0]][0] += 1
+        else:
+            nothing_data[r[0]] = [0, 1]
+            if is_nothing:
+                nothing_data[r[0]][0] += 1
+        if r[1] in nothing_data:
+            nothing_data[r[1]][1] += 1
+            if is_nothing:
+                nothing_data[r[1]][0] += 1
+        else:
+            nothing_data[r[1]] = [0, 1]
+            if is_nothing:
+                nothing_data[r[1]][0] += 1
+
+    # print(nothing_data)
+    with open("minus_claus_data2.json", "w", encoding="utf-8") as f:
+        json.dump(nothing_data, f, ensure_ascii=False)
+
+
+def analyze_minus_claus(file: str):
+    with open(file, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    items: list[tuple[str, int, int]] = []
+    for key, value in data.items():
+        if value[1] <= 50:
+            continue
+        if len(key) > util.WORD_COMBINE_CHAR_LIMIT:
+            continue
+        items.append((key, value[0], value[1]))
+    items.sort(key=lambda x: x[1]/x[2], reverse=True)
+    for item in items:
+        if item[1] <= item[2] * 0.99:
+            break
+        # Check if item is start case
+        parts = item[0].split(" ")
+        is_valid = True
+        for part in parts:
+            if not part[0].isalpha():
+                continue
+            if not part[0].isupper():
+                is_valid = False
+                break
+            for char in part[1:]:
+                if not char.isalpha():
+                    continue
+                if char.isupper():
+                    is_valid = False
+                    break
+        if is_valid:
+            print(f"{item[0]}: {item[1]} / {item[2]}")
+
+
+def morse_code_to_eeeing(data: str):
+    # .... .. / . ...- . .-. -.-- .--. --- -. -.--
+    for char in data:
+        if char == '.':
+            print("E", end=" ")
+        elif char == '-':
+            print("EEE", end=" ")
+        elif char == " ":
+            print(" ", end=" ")
+        elif char == '/':
+            print("  ", end=" ")
+    print("")
+
+# def eeeing_to_morse_code(data: str):
+#     for word in data.split("  "):
+#         for char in word.split(" "):
+#             if char == "E":
+#                 print(".", end="")
+#             elif char == "EE":
+#                 print("-", end="")
+#             elif char == "":
+#                 print(" ", end="")
+#         print(" ", end="")
+#     print("")
+
+
+def eeeing_binary_to_text(data: str):
+    print()
+    print(data)
+    for char in data.split(" "):
+        bits = 0
+        for c in char:
+            if c == "E":
+                bits = (bits << 1) | 1
+            elif c == "e":
+                bits = (bits << 1)
+        print(chr(bits), end="")
+    print()
+
+
+def binary_to_eeeing(data: str):
+    for char in data:
+        num = ord(char)
+        for i in range(8):
+            if num & (1<<(7-i)):
+                print("E", end="")
+            else:
+                print("e", end="")
+            # num >>= 1
+        print(" ", end="")
+    print()
+
+
 if __name__ == '__main__':
     pass
+    input()
+    eeeing_binary_to_text(input())    # binary_to_eeeing("Yes, I most certainly have decoded the message. How have you been rom?")
+    # binary_to_eeeing("Nini rom, may Luna bless your dreams tonight")
+    # find_minus_claus("Depth 11/persistent_depth11_pass2.json")
+    # analyze_minus_claus("minus_claus_data2.json")
     # if os.name == 'nt':
     #     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     # asyncio.run(main())
 
     # merge_sql("Depth 12/recipes_depth12b.db")
-    # generate_single_best_recipe("Depth 11/persistent_depth11_pass2.json", "best_recipes_depth_11_pass2.txt")
-    get_decent_recipe("Depth 11/persistent_depth11+1.json", ["Indonesia"])
+    # generate_single_best_recipe("persistent.json", "best_recipes_single_letter.txt")
+    # get_decent_recipe("Depth 11/persistent_depth11+1.json", ["Indonesia"])
+    # merge_savefile("Savefiles/infinitecraft (18).json", "Savefiles/infinitecraft_4.json", "Savefiles/infinitecraft_merged2.json")
     # generate_json("Depth 11/persistent_depth11_pass2.json", "all_best_recipes_depth_11_pass2.json")
     # add_to_recipe_handler("cache/items.json", "cache/recipes.json")
     # convert_to_savefile("infinitecraft_large_with_no_nothings.json", "cache/items.json", "cache/recipes.json")

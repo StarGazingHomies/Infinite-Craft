@@ -14,6 +14,8 @@ quoted_alphabets = [
     ['~', ''],
     ['‘', '’'],
     ['“', '”'],
+    ['.', '('],
+    ['.', ')']
 ]
 # ! < " < # < ' < ( < ) < - < . < / < \ < _ < ~ <<< ‘ < “
 
@@ -113,7 +115,7 @@ tool_groups = [
         ]
     ],
     [
-        (770, 400), (42, 100),
+        (1070, 400), (42, 100),
         [
             "Plural",
             "The Plural",
@@ -122,14 +124,14 @@ tool_groups = [
         ]
     ],
     [
-        (920, 400), (42, 100),
+        (1220, 400), (42, 100),
         [
             "Unplural",
             "Singular"
         ]
     ],
     [
-        (770, 575), (42, 100),
+        (1070, 575), (42, 100),
         [
             "Without Spaces",
             "Without Spacing",
@@ -138,7 +140,7 @@ tool_groups = [
         ]
     ],
     [
-        (1000, 575), (42, 100),
+        (1300, 575), (42, 100),
         [
             "With Spaces",
             "With Spacing",
@@ -147,7 +149,7 @@ tool_groups = [
         ]
     ],
     [
-        (770, 750), (42, 200),
+        (1070, 750), (42, 200),
         [
             ["Backwards", "Opposite"],
             ["Inverse", "Inverted"],
@@ -158,7 +160,7 @@ tool_groups = [
         ]
     ],
     [
-        (770, 1030), (42, 100),
+        (1070, 1030), (42, 100),
         [
             ['"0"', '“0”'],
             ['"1"', '“1”'],
@@ -173,7 +175,7 @@ tool_groups = [
         ]
     ],
     [
-        (970, 1030), (42, 100),
+        (1270, 1030), (42, 100),
         [
             ['"+"', '"."'],
             ['"?"', '"!"'],
@@ -192,11 +194,15 @@ tool_groups = [
             "Hashtag",
             "The Hashtag",
             "Hashtag The",
-            "Hashtagify"
+            "Hashtagify",
+            "Prepend Hashtag",
+            "Remove Hashtag",
+            "Put this in quotation marks",
+            "U+0020"
         ]
     ],
     [
-        (1000, 250), (42, 100),
+        (1300, 30), (42, 100),
         [
             "Next",
             "Next Alphabet",
@@ -216,8 +222,8 @@ for group in tool_groups:
                 locations.append([sub_tool, x + j * width, y + i * height])
 
 # print(locations)
-# with open("locations.json", "w", encoding='utf-8') as fout:
-#     json.dump({"locations": locations}, fout, ensure_ascii=False, indent=4)
+with open("locations.json", "w", encoding='utf-8') as fout:
+    json.dump({"locations": locations}, fout, ensure_ascii=False, indent=4)
 
 # Pony locations
 pony_locations = []

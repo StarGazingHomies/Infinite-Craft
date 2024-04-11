@@ -43,6 +43,11 @@ class OptimizerRecipeList:
     def __str__(self):
         return f"OptimizerRecipeList with {len(self.ids)} items and {len(self.fwd)} recipes"
 
+    def add_item(self, item: str) -> int:
+        self.ids[item.lower()] = len(self.ids)
+        self.id_capitalized[len(self.ids) - 1] = item
+        return len(self.ids) - 1
+
     def get_name(self, item_id: int) -> str:
         return self.ids.inv[item_id]
 
@@ -50,7 +55,11 @@ class OptimizerRecipeList:
         return self.id_capitalized[item_id]
 
     def get_id(self, name: str) -> int:
-        return self.ids[name.lower()]
+        try:
+            return self.ids[name.lower()]
+        except KeyError:
+            print(f"{name} not found!")
+            return self.add_item(name)
 
     def get_generation_id(self, item_id: int) -> Optional[int]:
         if self.gen is None:
