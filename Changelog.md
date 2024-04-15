@@ -2,20 +2,19 @@
 
 TODO:
 - Better configuration (CLI arguments or config file)
-- Speedrun auto-optimization (minimum spanning hypergraph)
-- Transformers (model: minillama or similar) tokenizers
+- Tokenizers (w/ transformers and a llama-like model, such as minillama)
+- Hybrid Step-Generation Preprocessing
+- N-Step-Lookahead Generational Algorithm for savefiles?
+Maybe even alpha-beta pruning?
 
 
 ## Version 1.5.1
 
-
 - Added command line arguments for `optimize.py`.
-
 
 ## Version 1.5
 
-Added optimizers for speedrunning and existing savefiles!
-(TODO: actually complete them lol)
+Added optimizers for speedrunning paths and finding optimal paths in savefiles!
 
 - Separated the `pair_to_int` and `int_to_pair` functions 
 along with static variables such as `DEFAULT_STARTING_ITEMS` 
@@ -27,7 +26,6 @@ element with a generation-based admissible heuristic. (Source: BRH0208)
 - Added a simple generational algorithm `optimizers/simple_generational.py` 
 starting from the result element with a generation-based heuristic, 
 made for fast analysis of savefiles. Used on yui's site (Infinite Craft Browser).
-
 
 ## Version 1.4
 
