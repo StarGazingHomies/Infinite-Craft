@@ -71,16 +71,6 @@ def optimize(
                 else:
                     cost_v = recipe_list.get_generation_id(v)
 
-            # if recipe_list.get_generation_id(u) is None:
-            #     cost_u = nonexistent_generation
-            # elif u not in done and u not in todo:
-            #     cost_u = recipe_list.get_generation_id(u)
-            #
-            # if recipe_list.get_generation_id(v) is None:
-            #     cost_v = nonexistent_generation
-            # elif v not in done and v not in todo:
-            #     cost_v = recipe_list.get_generation_id(v)
-
             this_cost = max(cost_u, cost_v)  # - 1 / (min(cost_u, cost_v) + 1)
 
             if this_cost < min_cost:

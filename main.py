@@ -66,7 +66,7 @@ allow_starting_elements: bool = False
 resume_last_run: bool = True
 last_game_state: Optional['GameState'] = None
 new_last_game_state: Optional['GameState'] = None
-autosave_interval = 500     # Save every 500 new visited elements
+autosave_interval = 500     # Save persistent file every 500 new visited elements
 autosave_counter = 0
 
 

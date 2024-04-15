@@ -497,7 +497,7 @@ def generate_single_best_recipe(input_file: str, output_file: str):
     except FileNotFoundError:
         best_recipes = {}
 
-    MAX_DEPTH = 11
+    MAX_DEPTH = 12
     recipe_list = [[] for _ in range(MAX_DEPTH + 1)]
     for key, value in best_recipes.items():
         if len(value[0]) > MAX_DEPTH:
@@ -516,8 +516,8 @@ def generate_single_best_recipe(input_file: str, output_file: str):
             for key, value in recipe_list[i]:
                 # if len(key) != 3 or not all([ord('a') <= ord(x) <= ord('z') for x in key.lower()]):
                 #     continue
-                if len(key) != 1 or not key[0].isalpha():
-                    continue
+                # if len(key) != 1 or not key[0].isalpha():
+                #     continue
                 # if key.lower() in visited:
                 #     continue
                 # visited.add(key.lower())
@@ -768,30 +768,30 @@ def analyze_minus_claus(file: str):
             print(f"{item[0]}: {item[1]} / {item[2]}")
 
 
-def morse_code_to_eeeing(data: str):
-    # .... .. / . ...- . .-. -.-- .--. --- -. -.--
-    for char in data:
-        if char == '.':
-            print("E", end=" ")
-        elif char == '-':
-            print("EEE", end=" ")
-        elif char == " ":
-            print(" ", end=" ")
-        elif char == '/':
-            print("  ", end=" ")
-    print("")
+def make_ingredients_case_insensitive():
+    rh = recipe.RecipeHandler([])
 
-# def eeeing_to_morse_code(data: str):
-#     for word in data.split("  "):
-#         for char in word.split(" "):
-#             if char == "E":
-#                 print(".", end="")
-#             elif char == "EE":
-#                 print("-", end="")
-#             elif char == "":
-#                 print(" ", end="")
-#         print(" ", end="")
-#     print("")
+    recipes_cur = rh.db.cursor()
+    recipes_cur.execute("""
+    SELECT ing1.name, ing2.name, result.name
+    FROM recipes
+    JOIN items   AS ing1   ON ing1.id = recipes.ingredient1_id
+    JOIN items   AS ing2   ON ing2.id = recipes.ingredient2_id
+    JOIN items   AS result ON result.id = recipes.result_id
+    """)
+    recipes_count = 0
+    for r in recipes_cur:
+        recipes_count += 1
+        if recipes_count % 100000 == 0:
+            print(f"Processed {recipes_count} recipes")
+
+        ing1, ing2, result = r
+        # print(ing1, ing2, result)
+        ing1 = util.to_start_case(ing1)
+        ing2 = util.to_start_case(ing2)
+        # print(ing1, ing2, result)
+
+        rh.add_recipe(ing1, ing2, result)
 
 
 def eeeing_binary_to_text(data: str):
@@ -823,70 +823,11 @@ def binary_to_eeeing(data: str):
 
 if __name__ == '__main__':
     pass
-    input()
-    eeeing_binary_to_text(input())    # binary_to_eeeing("Yes, I most certainly have decoded the message. How have you been rom?")
+    # input()
+    # eeeing_binary_to_text(input())    # binary_to_eeeing("Yes, I most certainly have decoded the message. How have you been rom?")
     # binary_to_eeeing("Nini rom, may Luna bless your dreams tonight")
-    # find_minus_claus("Depth 11/persistent_depth11_pass2.json")
-    # analyze_minus_claus("minus_claus_data2.json")
+    # make_ingredients_case_insensitive()
     # if os.name == 'nt':
     #     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     # asyncio.run(main())
-
-    # merge_sql("Depth 12/recipes_depth12b.db")
-    # generate_single_best_recipe("persistent.json", "best_recipes_single_letter.txt")
-    # get_decent_recipe("Depth 11/persistent_depth11+1.json", ["Indonesia"])
-    # merge_savefile("Savefiles/infinitecraft (18).json", "Savefiles/infinitecraft_4.json", "Savefiles/infinitecraft_merged2.json")
-    # generate_json("Depth 11/persistent_depth11_pass2.json", "all_best_recipes_depth_11_pass2.json")
-    # add_to_recipe_handler("cache/items.json", "cache/recipes.json")
-    # convert_to_savefile("infinitecraft_large_with_no_nothings.json", "cache/items.json", "cache/recipes.json")
-    # cancers = parse_pbpbpb_cancer_list("top_cancer_a.txt")
-    # print(cancers)
-    # d = load_save_file("infinitecraft_main_old_save_58k.json")
-    # print(len(d["elements"]))
-    # for e in d["elements"]:
-    #     if "mirror" in e["text"].lower():
-    #         print(e)
-    # print(d["recipes"]["The Ticket Masters"])
-    # print(d["recipes"]["Ticket Master"])
-    # print(d["recipes"]["Mirror Master"])
-    # remove_first_discoveries("infinitecraft_with_tools.json", "infinitecraft_no_fd.json")
-    # get_results_for(["Obama"])
-    # print(ordered_total(0, 0, 2))
-    # alpha_3_tmp("best_recipes_three_letter.txt", "three_letters.txt")
-    # i = get_items("cache/items.json")
-    # three_letter = set()
-    # counter = 0
-    # discoveries = 0
-    # first_discoveries = 0
-    # for key, value in i.items():
-    #     discoveries += 1
-    #     if value[2]:
-    #         first_discoveries += 1
-    # if key.isalnum() and len(key) == 3 and key.lower() not in three_letter:
-    #     three_letter.add(key.lower())
-    #     if value[2]:
-    #         print(key, value)
-    #         counter += 1
-    # print(discoveries, first_discoveries)
-    # pass
-    # merge_old("cache/recipes_o.json", "cache/items_o.json")
-    # get_recipes_using(["Ab", "AB", "Ac", "AC", "Lord of the Rings", "Lord Of The Rings"])
-    # print(ordered_total(0, 0, 9))  # 26248400230
-    # print(ordered_total(0, 0, 10))  # 667110736190
-    # print(ordered_total(0, 0, 11))  # 18527307559355
-    # print(ordered_total(6, 0, 11))  # 3204682702923
-    # print(ordered_total(7, 1, 11))  # 1144649542152
-    # print(ordered_total(11, 2, 11))  # 146909202170
-    # print(ordered_total(16, 3, 11))  # 14715058266
-    # print(ordered_total_from_current([-1, -1, -1, -1, 5, 6, 10, 15, 33, 40, 42, 50, 72, 88, 99]))
-    # print(ordered_total_from_current([-1, -1, -1, -1, 5, 6, 10, 15, 33, 40, 42, 50, 72, 88, 99]) / ordered_total(0, 0, 11))
-    # for i in range(15):
-    #     print(i, ordered_total(0, 0, i))
-    # other_save = json.load(open("infinitecraft (2).json", 'r', encoding='utf-8'))
-    # print(len(other_save["elements"]))
-    # counter = 0
-    # for v in other_save["elements"]:
-    #     if v["discovered"]:
-    #         counter += 1
-    # print(counter)
-    # convert_to_id("cache/recipes.json", "cache/items.json", "cache/recipes_id.json", "cache/items_id.json")
+    generate_single_best_recipe("Depth 12/persistent_depth12c.json", "Depth 12/persistent_depth12c_single_best.txt")

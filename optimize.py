@@ -1,5 +1,7 @@
 # Speedrun Optimizer
 import os
+import asyncio
+import argparse
 
 import aiohttp
 
@@ -23,7 +25,6 @@ from optimizers.optimizer_interface import OptimizerRecipeList
 
 
 async def request_extra_generation(session: aiohttp.ClientSession, rh: recipe.RecipeHandler, current: list[str]):
-    # Only one generation for now, maybe iddfs or recursion later
     new_items = set()
     for item1 in current:
         for item2 in current:
@@ -72,56 +73,86 @@ async def initialize_optimizer(
     return recipe_list
 
 
-async def main():
+async def main(*,
+               file: str = "speedrun.txt",
+               ignore_case: bool = False,
+               extra_generations: int = 1,
+               deviation: int = -1,
+               target: list[str] = None,
+               local_only: bool = False):
     # Parse crafts file
-    crafts = speedrun.parse_craft_file("speedrun.txt")
-    # crafts2 = parse_craft_file("speedrun.txt")
-    #
-    # print(f"Added: \n{'\n'.join(set([str(craft) for craft in crafts]).difference(set([str(craft) for craft in crafts2])))}")
-    # print(f"Removed: \n{'\n'.join(set([str(craft) for craft in crafts2]).difference(set([str(craft) for craft in crafts])))}")
-    # return
-
+    crafts = speedrun.parse_craft_file(file, ignore_case=ignore_case)
     craft_results = [crafts[2] for crafts in crafts]
-    target = craft_results[-1]
+    if target is None:
+        target = [craft_results[-1],]
     max_crafts = len(crafts)
     final_items_for_current_recipe = list(util.DEFAULT_STARTING_ITEMS) + craft_results
-    print(final_items_for_current_recipe)
 
     # Request and build items cache
     headers = recipe.load_json("headers.json")["default"]
-    with recipe.RecipeHandler(final_items_for_current_recipe) as rh:
+    with recipe.RecipeHandler(final_items_for_current_recipe, local_only=local_only) as rh:
         async with aiohttp.ClientSession() as session:
             async with session.get("https://neal.fun/infinite-craft/", headers=headers) as resp:
                 pass
-            optimizer_recipes = await initialize_optimizer(session, rh, final_items_for_current_recipe, 1)
+            optimizer_recipes = await initialize_optimizer(
+                session,
+                rh,
+                final_items_for_current_recipe,
+                extra_generations)
 
     # Generate generations
     optimizer_recipes.generate_generations()
-    # print(optimizer_recipes.gen)
-    # print(optimizer_recipes.bwd)
-    # for result, recipes in optimizer_recipes.bwd.items():
-    #     for i, j in recipes:
-    #         print(f"{optimizer_recipes.get_name_capitalized(i)} + {optimizer_recipes.get_name_capitalized(j)} -> {optimizer_recipes.get_name_capitalized(result)}")
-    print(optimizer_recipes)
-    print(target)
-    print(optimizer_recipes.get_id(target))
-    print(optimizer_recipes.get_generation_id(optimizer_recipes.get_id(target)))
 
     # Initial crafts for deviation checking
-    # print(list(util.DEFAULT_STARTING_ITEMS) + craft_results)
     initial_crafts = [optimizer_recipes.get_id(item) for item in list(util.DEFAULT_STARTING_ITEMS) + craft_results]
-    # print(initial_crafts)
 
     # Run the optimizer
-    a_star.optimize([target], optimizer_recipes, max_crafts, initial_crafts, 2)
-    # a_star.optimize([chr(i + ord('A')) for i in range(26)], optimizer_recipes, max_crafts, initial_crafts, 2)
-    # a_star.optimize(["fromcharcode", "#fromcharcode"], optimizer_recipes, max_crafts, initial_crafts, 2)
-    # simple_generational.optimize(target, optimizer_recipes, max_crafts)
+    print(f"Optimizing for {target}...")
+    a_star.optimize(target, optimizer_recipes, max_crafts, initial_crafts, deviation)
+
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(description="Speedrun Optimizer")
+    parser.add_argument("filename",
+                        type=str,
+                        help="The file to read the crafts from")
+    parser.add_argument("--ignore-case",
+                        dest="ignore_case",
+                        action="store_true",
+                        help="Ignore case when parsing the crafts file")
+    parser.add_argument("-g", "--extra-generations",
+                        dest="extra_generations",
+                        type=int,
+                        default=1,
+                        help="The number of extra generations to generate")
+    parser.add_argument("-d", "--deviation",
+                        dest="deviation",
+                        type=int,
+                        default=-1,
+                        help="The maximum deviation from the original path, default off")
+    parser.add_argument("-t", "--target",
+                        dest="target",
+                        type=str,
+                        nargs="+",
+                        help="The target item to craft")
+    parser.add_argument("-l", "--local",
+                        dest="local",
+                        action="store_true",
+                        default=False,
+                        help="Use local cache instead of Neal's API")
+    return parser.parse_args()
 
 
 if __name__ == '__main__':
-    import asyncio
+    args = parse_arguments()
 
     if os.name == 'nt':
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    asyncio.run(main())
+    asyncio.run(main(
+        file=args.filename,
+        ignore_case=args.ignore_case,
+        extra_generations=args.extra_generations,
+        deviation=args.deviation,
+        target=args.target,
+        local_only=args.local
+    ))

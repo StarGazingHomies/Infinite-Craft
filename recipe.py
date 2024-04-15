@@ -72,7 +72,11 @@ class RecipeHandler:
 
     headers: dict[str, str] = {}
 
-    def __init__(self, init_state):
+    def __init__(self, init_state, **kwargs):
+        # Key word arguments
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
         # Load headers
         self.headers = load_json("headers.json")["api"]
 
@@ -159,11 +163,14 @@ class RecipeHandler:
             print(e)
 
     def add_recipe(self, a: str, b: str, result: str):
+        a = util.to_start_case(a)
+        b = util.to_start_case(b)
         if a > b:
             a, b = b, a
 
-        a = util.to_start_case(a)
-        b = util.to_start_case(b)
+        # Note that only the *INGREDIENT* will be converted to start case element.
+        # because ingredient case does not matter.
+        # The results will not, since the case of the resultant item may be significant.
         self.add_starting_item(a, "", False)
         self.add_starting_item(b, "", False)
 
@@ -208,10 +215,10 @@ class RecipeHandler:
         self.add_recipe(a, b, result)
 
     def get_local(self, a: str, b: str) -> Optional[str]:
-        if a > b:
-            a, b = b, a
         a = util.to_start_case(a)
         b = util.to_start_case(b)
+        if a > b:
+            a, b = b, a
 
         cur = self.db.cursor()
         cur.execute(query_recipe, (a, b))

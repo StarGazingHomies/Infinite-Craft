@@ -26,8 +26,8 @@ elements = ["Hydrogen", "Helium", "Lithium", "Beryllium", "Boron", "Carbon", "Ni
 recipe_handler = None
 
 
-def parse_craft_file(filename: str, forced_delimiter: Optional[str] = None) -> list[tuple[str, str, str]]:
-    with open(filename, 'r') as file:
+def parse_craft_file(filename: str, forced_delimiter: Optional[str] = None, *, ignore_case: bool = True, strict_order: bool = False) -> list[tuple[str, str, str]]:
+    with open(filename, 'r', encoding='utf-8') as file:
         crafts = file.readlines()
 
     # Format: ... + ... [delimiter] ...
@@ -53,10 +53,36 @@ def parse_craft_file(filename: str, forced_delimiter: Optional[str] = None) -> l
                 continue
         ingredients, results = craft.split(delimiter)
         ing1, ing2 = ingredients.split(' + ')
-        ing1, ing2, results = ing1.strip().lower(), ing2.strip().lower(), results.strip().lower()
+        if strict_order:
+            if ing1 > ing2:
+                ing1, ing2 = ing2, ing1
+        ing1, ing2, results = ing1.strip(), ing2.strip(), results.strip()
+        if ignore_case:
+            ing1, ing2, results = ing1.lower(), ing2.lower(), results.lower()
         crafts_parsed.append((ing1, ing2, results))
         craft_count += 1
     return crafts_parsed
+
+
+def compare(original: str, new: str):
+    crafts = parse_craft_file(original, ignore_case=False, strict_order=True)
+    crafts2 = parse_craft_file(new, ignore_case=False, strict_order=True)
+
+    # print(set([str(craft) for craft in crafts]))
+    # print(set([str(craft) for craft in crafts2]))
+
+    elem_additions = set([craft[2] for craft in crafts2]).difference(set([craft[2] for craft in crafts]))
+    print(f"Added Elements: {', '.join(elem_additions)}")
+    elem_removals = set([craft[2] for craft in crafts]).difference(set([craft[2] for craft in crafts2]))
+    print(f"Removed Elements: {', '.join(elem_removals)}")
+
+    additions = set([str(craft) for craft in crafts2]).difference(set([str(craft) for craft in crafts]))
+    pretty_additions = [f"{craft[0]} + {craft[1]} -> {craft[2]}" for craft in crafts2 if str(craft) in additions]
+    print(f"Added Recipes: \n{'\n'.join(pretty_additions)}")
+    removals = set([str(craft) for craft in crafts]).difference(set([str(craft) for craft in crafts2]))
+    pretty_removal = [f"{craft[0]} + {craft[1]} -> {craft[2]}" for craft in crafts if str(craft) in removals]
+    print(f"Removed Recipes: \n{'\n'.join(pretty_removal)}")
+    return
 
 
 def static_check_script(filename: str):
@@ -280,7 +306,9 @@ def clean(filename: str, out_filename: str):
 if __name__ == '__main__':
     pass
     # combine_element_pairs()
-    static_check_script('speedrun.txt')
+    # static_check_script('speedrun.txt')
+    # compare("Speedruns/with/with_C27.txt", "Speedruns/with/with_C25.txt")
+    compare("Speedruns/neal.fun/speedrun_neal.fun_B29.txt", "Speedruns/neal.fun/speedrun_neal.fun_B25_g1_ldb_g2_d4.txt")
     # static_check_script('speedrun_hashtag_fromcharcode.txt')
     # best_recipes = load_best_recipes('expanded_recipes_depth_10.txt')
     # count = 0

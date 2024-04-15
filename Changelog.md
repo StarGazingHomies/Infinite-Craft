@@ -6,6 +6,12 @@ TODO:
 - Transformers (model: minillama or similar) tokenizers
 
 
+## Version 1.5.1
+
+
+- Added command line arguments for `optimize.py`.
+
+
 ## Version 1.5
 
 Added optimizers for speedrunning and existing savefiles!
@@ -16,9 +22,11 @@ along with static variables such as `DEFAULT_STARTING_ITEMS`
 and `WORD_COMBINE_CHAR_LIMIT`into `util.py`.
 - Added a `OptimizerRecipeList` class for a common interface
 between all of the optimizers that will be implemented.
-- Added an A* algorithm starting from the result element with a
-generation-based admissible heuristic. (Source: BRH0208)
-- 
+- Added an A* algorithm `optimizers/a_star.py` starting from the result 
+element with a generation-based admissible heuristic. (Source: BRH0208)
+- Added a simple generational algorithm `optimizers/simple_generational.py` 
+starting from the result element with a generation-based heuristic, 
+made for fast analysis of savefiles. Used on yui's site (Infinite Craft Browser).
 
 
 ## Version 1.4

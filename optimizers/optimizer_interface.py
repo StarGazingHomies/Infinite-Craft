@@ -137,6 +137,12 @@ class OptimizerRecipeList:
 
         return
 
+    def hybrid_generations(self, num_steps: int = 5, init_items: list[str] = DEFAULT_STARTING_ITEMS) -> None:
+        # TODO: Hybrid IDDFS for full steps until num_steps, then generate generations
+        # Likely a better heuristic than simple generations.
+        # Trading a bit more precompute for faster algorithm execution / better heuristic.
+        ...
+
 
 def savefile_to_optimizer_recipes(file: str) -> OptimizerRecipeList:
     with open(file, "r", encoding='utf-8') as file:

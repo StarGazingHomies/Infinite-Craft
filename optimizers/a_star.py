@@ -172,7 +172,11 @@ def optimize(
     # Main loop
     while len(priority_queue) > 0:
         _, current_state = heapq.heappop(priority_queue)
-        # print(f"Current: {current_state.current}, {current_state.craft_count}, {current_state.heuristic}")
+        # Stop if completed and if we are no longer optimal
+        if completed and current_state.heuristic > completed_steps:
+            break
+
+        # Information
         processed_states += 1
         if current_state.heuristic > min_heuristic:
             min_heuristic = current_state.heuristic
@@ -182,18 +186,14 @@ def optimize(
 
         # Save all optimal-steps states
         if current_state.is_complete():
+            print("Complete!")
             final_states.append(current_state)
             completed_steps = current_state.craft_count
+            upper_bound = completed_steps
             completed = True
             continue
 
-        if completed:
-            if current_state.craft_count > completed_steps:
-                break
-            if current_state.is_complete():
-                final_states.append(current_state)
-            continue
-
+        # Check if the current state is already processed
         if frozenset(current_state.current) in processed:
             continue
         processed.add(frozenset(current_state.current))
@@ -228,10 +228,7 @@ def optimize(
             heapq.heappush(priority_queue, (next_state.heuristic, next_state))
 
     print(f"Complete! {completed_steps} crafts")
-    # print(final_state.trace)
-    # for u, v, result in final_state.trace[::-1]:
-    #     print(
-    #         f"{recipe_list.get_name_capitalized(u)} + {recipe_list.get_name_capitalized(v)} -> {recipe_list.get_name_capitalized(result)}")
+    print(f"Found {len(final_states)} optimal recipes.")
 
     # Post-processing - make sure the ordering is correct
     for final_state in final_states:
