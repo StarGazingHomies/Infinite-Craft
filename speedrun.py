@@ -6,6 +6,7 @@ import urllib
 from typing import Optional
 from urllib.parse import quote_plus
 from urllib.request import Request, urlopen
+import argparse
 
 import recipe
 
@@ -67,66 +68,131 @@ def parse_craft_file(filename: str, forced_delimiter: Optional[str] = None, *, i
 def compare(original: str, new: str):
     crafts = parse_craft_file(original, ignore_case=False, strict_order=True)
     crafts2 = parse_craft_file(new, ignore_case=False, strict_order=True)
+    elements = set([craft[2] for craft in crafts])
+    elements2 = set([craft[2] for craft in crafts2])
 
     # print(set([str(craft) for craft in crafts]))
     # print(set([str(craft) for craft in crafts2]))
 
-    elem_additions = set([craft[2] for craft in crafts2]).difference(set([craft[2] for craft in crafts]))
+    elem_additions = set(elements2).difference(elements)
     print(f"Added Elements: {', '.join(elem_additions)}")
-    elem_removals = set([craft[2] for craft in crafts]).difference(set([craft[2] for craft in crafts2]))
+    elem_removals = set(elements).difference(elements2)
     print(f"Removed Elements: {', '.join(elem_removals)}")
 
-    additions = set([str(craft) for craft in crafts2]).difference(set([str(craft) for craft in crafts]))
-    pretty_additions = [f"{craft[0]} + {craft[1]} -> {craft[2]}" for craft in crafts2 if str(craft) in additions]
-    print(f"Added Recipes: \n{'\n'.join(pretty_additions)}")
-    removals = set([str(craft) for craft in crafts]).difference(set([str(craft) for craft in crafts2]))
-    pretty_removal = [f"{craft[0]} + {craft[1]} -> {craft[2]}" for craft in crafts if str(craft) in removals]
-    print(f"Removed Recipes: \n{'\n'.join(pretty_removal)}")
+    additions = []
+    removals = []
+    changes = {}
+    for craft in crafts:
+        if craft[2] not in elements2:
+            removals.append(craft)
+        else:
+            if craft not in crafts2:
+                changes[craft[2]] = [craft, None]
+    for craft in crafts2:
+        if craft[2] not in elements:
+            additions.append(craft)
+        else:
+            if craft not in crafts:
+                changes[craft[2]][1] = craft
+
+    print(f"Added Crafts: {len(additions)}")
+    for craft in additions:
+        print(f"            {craft[0]} + {craft[1]} -> {craft[2]}")
+    print(f"Removed Crafts: {len(removals)}")
+    for craft in removals:
+        print(f"            {craft[0]} + {craft[1]} -> {craft[2]}")
+    print(f"Changed Crafts: {len(changes)}")
+    for key, value in changes.items():
+        print(f"Original:   {value[0][0]} + {value[0][1]} -> {value[0][2]}")
+        print(f"New:        {value[1][0]} + {value[1][1]} -> {value[1][2]}")
+        print()
     return
 
 
-def static_check_script(filename: str):
-    crafts = parse_craft_file(filename)
+def simple_check_script(filename: str, *args, **kwargs) -> tuple[bool, bool, bool]:
+    crafts = parse_craft_file(filename, *args, **kwargs)
+    has_duplicates = False
+    has_misplaced = False
+    has_missing = False
 
     # Format: ... + ... -> ...
     current = {"earth": 0,
                "fire": 0,
                "water": 0,
                "wind": 0}
+    crafted = set()
+    possible_misplaced = set()
     for i, craft in enumerate(crafts):
         ing1, ing2, result = craft
-        if ing1.strip() not in current:
-            print(f"Ingredient {ing1.strip()} not found in line {i + 1}")
-        else:
-            current[ing1.strip()] += 1
-        if ing2.strip() not in current:
-            print(f"Ingredient {ing2.strip()} not found in line {i + 1}")
-        else:
-            current[ing2.strip()] += 1
-        if result.strip() in current:
-            print(f"Result {result.strip()} already exists in line {i + 1}")
+        ing1, ing2, result = ing1.lower(), ing2.lower(), result.lower()
 
-        current[result.strip()] = 0
-    element_count = 0
-    elements_copy = elements.copy()
+        if ing1 not in current:
+            possible_misplaced.add(ing1)
+            current[ing1] = 1
+        else:
+            current[ing1] += 1
+
+        if ing2.strip() not in current:
+            possible_misplaced.add(ing2)
+            current[ing2] = 1
+        else:
+            current[ing2] += 1
+
+        if result in crafted:
+            print(f"Result {result} already exists in line {i + 1}")
+            has_duplicates = True
+        crafted.add(result)
+        if result not in current:
+            current[result] = 0
+
     for ingredient, value in current.items():
-        if value == 0 and ingredient not in elements_copy:
+        if value == 0 and ingredient:
+            # If the ingredient is a result, then it is fine not being used.
             print(f"Ingredient {ingredient} is not used in any recipe")
-        if ingredient in elements_copy:
-            element_count += 1
-            elements_copy.remove(ingredient)
-    # print("\n".join([str(elements_copy[i * 10:i * 10 + 10]) for i in range(11)]))
-    print(len(crafts))
-    # print(current)
-    # current_list = list(current.items())
-    # current_list.sort(key=lambda x: x[1], reverse=True)
-    # for k, v in current_list:
-    #     if k in elements:
-    #         continue
-    #     print(f"{k}: {v}")
-    # print(tuple(current.keys()))
-    # print(element_count)
-    return current
+
+    for element in possible_misplaced:
+        if element in crafted:
+            print(f"Element {element} is misplaced.")
+            has_misplaced = True
+        else:
+            print(f"Element {element} is missing.")
+            has_missing = True
+
+    return has_duplicates, has_misplaced, has_missing
+
+
+def loop_check_script(filename, *args, **kwargs) -> bool:
+    crafts = parse_craft_file(filename, *args, **kwargs)
+    cur_elements = {"earth", "fire", "water", "wind"}
+    new_order = []
+
+    while len(cur_elements) < len(crafts) + 4:
+        has_changes = False
+        for i, craft in enumerate(crafts):
+            ing1, ing2, result = craft
+            ing1, ing2, result = ing1.lower(), ing2.lower(), result.lower()
+            if ing1 in cur_elements and ing2 in cur_elements and result not in cur_elements:
+                cur_elements.add(result)
+                new_order.append(craft)
+                has_changes = True
+        if not has_changes:
+            print("There is a loop in the recipe!")
+            print("Correct ordering, up to the loop:")
+            for craft in new_order:
+                print(f"    {craft[0]} + {craft[1]} -> {craft[2]}")
+            return False
+
+    print("Correct ordering:")
+    for craft in new_order:
+        print(f"    {craft[0]} + {craft[1]} -> {craft[2]}")
+    return True
+
+
+def static_check_script(filename: str, *args, **kwargs):
+    result = simple_check_script(filename, *args, **kwargs)
+    if not result[0] and result[1] and not result[2]:
+        print("Trying to correct for misplaced elements...")
+        loop_check_script(filename, *args, **kwargs)
 
 
 def dynamic_check_script(filename: str):
@@ -176,139 +242,19 @@ def count_uses(filename: str):
     print(current)
 
 
-def load_best_recipes(filename: str) -> dict[str, list[list[tuple[str, str, str]]]]:
-    # Loading the all best recipes file for easy element adding
-    with open(filename, 'r', encoding='utf-8') as file:
-        lines = file.readlines()
-
-    recipes: dict[str, list[list[tuple[str, str, str]]]] = {}
-
-    current_element = ""
-    rec_separator = "--"
-    separator = "-----------------------------------------------"
-    state = 0
-    current_recipe = []
-    for line in lines:
-        try:
-            line = line[:-1]  # Ignore last \n
-            if state == 0:
-                # Get current element
-                current_element = line
-                state = 1
-                continue
-            if state == 1:
-                state = 2
-                current_recipe = []
-                continue
-            if state == 2:
-                if line == separator:
-                    state = 0
-                    if current_element in recipes:
-                        recipes[current_element].append(current_recipe)
-                    else:
-                        recipes[current_element] = [current_recipe]
-                    continue
-                if line == rec_separator:
-                    state = 1
-                    if current_element in recipes:
-                        recipes[current_element].append(current_recipe)
-                    else:
-                        recipes[current_element] = [current_recipe]
-                    continue
-                # Get recipe
-                elem, w = line.split(" -> ")
-                u, v = elem.split(" + ", 1)
-                current_recipe.append((u, v, w))
-        except Exception as e:
-            print(line, state)
-
-    return recipes
-
-
-def add_element(filename: str, element: str, recipes: dict[str, list[list[tuple[str, str, str]]]]):
-    if element not in recipes:
-        print(f"Element {element} not found in recipes")
-        return
-
-    cur_elements = static_check_script(filename)
-
-    best_recipe = []
-    best_cost = 1e9
-    speedy_recipe = []
-    for r in recipes[element]:
-        cost = len(r)
-        for u, v, w in r:
-            if w in cur_elements:
-                cost -= 1
-            else:
-                speedy_recipe.append((u, v, w))
-        # print(cost, r)
-        if cost < best_cost:
-            best_cost = cost
-            best_recipe = speedy_recipe
-        speedy_recipe = []
-    print(f"Best recipe for {element} has cost {best_cost}:")
-    for u, v, w in best_recipe:
-        print(f"{u} + {v} -> {w}")
-
-
-def combine_element_pairs():
-    global recipe_handler
-    if recipe_handler is None:
-        recipe_handler = recipe.RecipeHandler()
-
-    results = {}
-    for i in range(len(elements)):
-        for j in range(i, len(elements)):
-            result = recipe_handler.combine(elements[i], elements[j])
-            if result != elements[i] and result != elements[j]:
-                if result in results:
-                    results[result].append((elements[i], elements[j]))
-                else:
-                    results[result] = [(elements[i], elements[j])]
-
-    # intermediates = list(results.items())
-    # print(intermediates)
-
-    unused_elements = elements.copy()
-
-    for k, v in results.items():
-        if k in unused_elements:
-            unused_elements.remove(k)
-        if k not in elements:
-            continue
-        print(f"{k} can be obtained from {len(v)} methods")
-        for u, w in v:
-            print(f"{u} + {w} -> {k}")
-        print()
-
-    for e in unused_elements:
-        print(f"{e} can't be made in 1 step")
-
-
-def clean(filename: str, out_filename: str):
-    with open(filename, 'r', encoding='utf-8') as file:
-        lines = file.readlines()
-
-    new_lines = []
-    for line in lines:
-        new_line = ""
-        for char in line:
-            if 32 <= ord(char) < 128:
-                new_line += char
-        new_line = new_line.strip()
-        new_lines.append(new_line)
-
-    with open(out_filename, 'w') as file:
-        file.writelines("\n".join(new_lines))
+def parse_args():
+    parser = argparse.ArgumentParser(description='Speedrun Checker')
+    parser.add_argument('action', type=str, help='Action to perform')
+    parser.add_argument('--file', type=str, help='File to read from')
+    return parser.parse_args()
 
 
 if __name__ == '__main__':
     pass
     # combine_element_pairs()
-    # static_check_script('speedrun.txt')
-    # compare("Speedruns/with/with_C27.txt", "Speedruns/with/with_C25.txt")
-    compare("Speedruns/neal.fun/speedrun_neal.fun_B29.txt", "Speedruns/neal.fun/speedrun_neal.fun_B25_g1_ldb_g2_d4.txt")
+    static_check_script('speedrun.txt', ignore_case=False)
+    # compare("Speedruns/curly quote a/curly_quote_a_A53.txt", "Speedruns/curly quote a/curly_quote_a_A49.txt")
+    # compare("Speedruns/neal.fun/speedrun_neal.fun_B29.txt", "Speedruns/neal.fun/speedrun_neal.fun_B25_g1_ldb_g2_d4.txt")
     # static_check_script('speedrun_hashtag_fromcharcode.txt')
     # best_recipes = load_best_recipes('expanded_recipes_depth_10.txt')
     # count = 0
