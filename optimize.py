@@ -34,6 +34,16 @@ async def request_extra_generation(session: aiohttp.ClientSession, rh: recipe.Re
     return new_items
 
 
+def get_local_generation(rh: recipe.RecipeHandler, current: list[str]):
+    new_items = set()
+    for item1 in current:
+        for item2 in current:
+            new_item = rh.get_local(item1, item2)
+            if new_item and new_item != "Nothing" and new_item not in current:
+                new_items.add(new_item)
+    return new_items
+
+
 async def get_all_recipes(session: aiohttp.ClientSession, rh: recipe.RecipeHandler, items: list[str]):
     total_recipe_count = len(items) * (len(items) + 1) // 2
     current_recipe = 0
@@ -58,12 +68,19 @@ async def initialize_optimizer(
         session: aiohttp.ClientSession,
         rh: recipe.RecipeHandler,
         items: list[str],
-        extra_generations: int = 1) -> OptimizerRecipeList:
+        extra_generations: int = 1,
+        local_generations: int = 0) -> OptimizerRecipeList:
     # Get extra generations
     for i in range(extra_generations):
         new_items = await request_extra_generation(session, rh, items)
         items.extend(new_items)
         print(f"Generation {i + 1} complete with {len(new_items)} new items.")
+
+    # Get extra local generations
+    for i in range(local_generations):
+        new_items = get_local_generation(rh, items)
+        items.extend(new_items)
+        print(f"Local Generation {i + 1} complete with {len(new_items)} new items.")
 
     # Get all recipes
     recipes = await get_all_recipes(session, rh, items)
@@ -77,6 +94,7 @@ async def main(*,
                file: str = "speedrun.txt",
                ignore_case: bool = False,
                extra_generations: int = 1,
+               local_generations: int = 0,
                deviation: int = -1,
                target: list[str] = None,
                local_only: bool = False):
@@ -84,7 +102,7 @@ async def main(*,
     crafts = speedrun.parse_craft_file(file, ignore_case=ignore_case)
     craft_results = [crafts[2] for crafts in crafts]
     if target is None:
-        target = [craft_results[-1],]
+        target = [craft_results[-1], ]
     max_crafts = len(crafts)
     final_items_for_current_recipe = list(util.DEFAULT_STARTING_ITEMS) + craft_results
 
@@ -98,13 +116,26 @@ async def main(*,
                 session,
                 rh,
                 final_items_for_current_recipe,
-                extra_generations)
+                extra_generations,
+                local_generations)
 
     # Generate generations
     optimizer_recipes.generate_generations()
 
     # Initial crafts for deviation checking
     initial_crafts = [optimizer_recipes.get_id(item) for item in list(util.DEFAULT_STARTING_ITEMS) + craft_results]
+
+    # Artificial targets, when args just don't cut it because there's too many
+    # alphabets = [chr(i) for i in range(65, 91)]
+    # target = []
+    # for c in alphabets:
+    #     target.append(c)
+    #     target.append(f".{c}")
+    #     target.append(f"\"{c}\"")
+    # print(target)
+
+    gen_1_pokemon = ['Lapras', 'Squirtle', 'Charizard', 'Magikarp', 'Magmar', 'Pikachu', 'Pidgey', 'Pidgeotto', 'Pidgeot', 'Gyarados', 'Raichu', 'Kingler', 'Blastoise', 'Charmander', 'Charmeleon', 'Bulbasaur', 'Ivysaur', 'Venusaur', 'Geodude', 'Graveler', 'Golem', 'Dragonite', 'Dragonair', 'Seadra', 'Omastar', 'Omanyte', 'Arcanine', 'Flareon', 'Vaporeon', 'Jolteon', 'Eevee', 'Aerodactyl', 'Moltres', 'Zapdos', 'Articuno', 'Cubone', 'Marowak', 'Oddish', 'Gloom', 'Vileplume', 'Jigglypuff', 'Wigglytuff', 'Grimer', 'Muk', 'Koffing', 'Weezing', 'Golduck', 'Psyduck', 'Weedle', 'Kakuna', 'Beedrill', 'Caterpie', 'Butterfree', 'Mewtwo', 'Mew', 'Hitmonlee', 'Hitmonchan', 'Meowth', 'Persian', 'Slowbro', 'Spearow', 'Fearow', 'Zubat', 'Golbat', 'Seaking', 'Goldeen', 'Sandshrew', 'Sandslash', 'Vulpix', 'Ninetales', 'Growlithe', 'Chansey', 'Snorlax', "Farfetch'd", 'Shellder', 'Cloyster', 'Mr. Mime', 'Arbok', 'Scyther', 'Onix', 'Ditto', 'Metapod', 'Dodrio', 'Doduo', 'Kangaskhan', 'Jynx', 'Ekans', 'Wartortle', 'Drowzee', 'Hypno', 'Poliwrath', 'Poliwhirl', 'Poliwag', 'Krabby', 'Nidoking', 'Sneasel', 'Weepinbell', 'Victreebel', 'Bellsprout', 'Raticate', 'Rattata', 'Porygon', 'Tauros', 'Slowpoke', 'Horsea', 'Nidoran', 'Nidorina', 'Nidoqueen', 'Nidorino', 'Magneton', 'Magnemite', 'Starmie', 'Staryu', 'Lickilicky', 'Lickitung', 'Exeggcute', 'Exeggutor', 'Abra', 'Kadabra', 'Alakazam', 'Tentacruel', 'Tentacool', 'Pinsir', 'Clefairy', 'Clefable', 'Paras', 'Parasect', 'Gastly', 'Haunter', 'Gengar', 'Ponyta', 'Rapidash', 'Rhyhorn', 'Rhydon', 'Seel', 'Dewgong', 'Venomoth', 'Venonat', 'Diglett', 'Dugtrio', 'Electrode', 'Voltorb', 'Kabutops', 'Kabuto', 'Tangela', 'Unown', 'Dratini', 'Primeape', 'Machamp', 'Machoke', 'Machop', 'Mankey', 'Electabuzz', 'Missingno']
+    target = gen_1_pokemon
 
     # Run the optimizer
     print(f"Optimizing for {target}...")
@@ -119,12 +150,18 @@ def parse_arguments():
     parser.add_argument("--ignore-case",
                         dest="ignore_case",
                         action="store_true",
+                        default=False,
                         help="Ignore case when parsing the crafts file")
     parser.add_argument("-g", "--extra-generations",
                         dest="extra_generations",
                         type=int,
                         default=1,
                         help="The number of extra generations to generate")
+    parser.add_argument("-lg", "--local-generations",
+                        dest="local_generations",
+                        type=int,
+                        default=0,
+                        help="The number of local generations to generate")
     parser.add_argument("-d", "--deviation",
                         dest="deviation",
                         type=int,
@@ -152,6 +189,7 @@ if __name__ == '__main__':
         file=args.filename,
         ignore_case=args.ignore_case,
         extra_generations=args.extra_generations,
+        local_generations=args.local_generations,
         deviation=args.deviation,
         target=args.target,
         local_only=args.local

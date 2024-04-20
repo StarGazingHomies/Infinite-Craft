@@ -535,6 +535,29 @@ def generate_single_best_recipe(input_file: str, output_file: str):
     #             f.write(f"{key}\n")
 
 
+def compare_persistent_files(file1: str, file2: str):
+    with open(file1, "r", encoding="utf-8") as f:
+        data1 = json.load(f)
+    with open(file2, "r", encoding="utf-8") as f:
+        data2 = json.load(f)
+
+    recipes1 = data1["BestRecipes"]
+    recipes2 = data2["BestRecipes"]
+
+    missing = []
+
+    for key, value in recipes1.items():
+        if key not in recipes2:
+            missing.append(key)
+            continue
+        depth = len(value[0])
+        if depth != len(recipes2[key][0]):
+            print(f"{key}: {depth} / {len(recipes2[key][0])}")
+
+    print("\n".join(missing))
+    return
+
+
 def generate_json(input_file: str, output_file: str):
     try:
         with open(input_file, "r", encoding="utf-8") as file:
@@ -734,9 +757,14 @@ def find_minus_claus():
         json.dump(nothing_data, f, ensure_ascii=False)
 
 
-def analyze_minus_claus(file: str):
+def analyze_minus_claus(file: str, persistent_file: str):
     with open(file, "r", encoding="utf-8") as f:
         data = json.load(f)
+
+    with open(persistent_file, "r", encoding="utf-8") as f:
+        persistent_data = json.load(f)
+    items_in_depth_11 = persistent_data["Visited"]
+    print(len(items_in_depth_11))
 
     items: list[tuple[str, int, int]] = []
     for key, value in data.items():
@@ -764,8 +792,9 @@ def analyze_minus_claus(file: str):
                 if char.isupper():
                     is_valid = False
                     break
-        if is_valid:
-            print(f"{item[0]}: {item[1]} / {item[2]}")
+        if not is_valid and item[0] in items_in_depth_11:
+        # if item[0] in items_in_depth_11:
+            print(f"{item[0]}: {item[1]} / {item[2]} ( {item[1] / item[2]} )")
 
 
 def make_ingredients_case_insensitive():
@@ -823,6 +852,9 @@ def binary_to_eeeing(data: str):
 
 if __name__ == '__main__':
     pass
+    # analyze_minus_claus("Searches/Minus Claus/minus_claus_data2.json",
+    #                     "Depth 11/persistent_depth11_pass3.json")
+    merge_sql("Depth 11/recipes_depth11_pass3.db")
     # input()
     # eeeing_binary_to_text(input())    # binary_to_eeeing("Yes, I most certainly have decoded the message. How have you been rom?")
     # binary_to_eeeing("Nini rom, may Luna bless your dreams tonight")
@@ -830,4 +862,7 @@ if __name__ == '__main__':
     # if os.name == 'nt':
     #     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     # asyncio.run(main())
-    generate_single_best_recipe("Depth 12/persistent_depth12c.json", "Depth 12/persistent_depth12c_single_best.txt")
+    # generate_single_best_recipe("Depth 11/persistent_depth11_pass3.json", "Depth 11/best_recipes_depth_11_pass3.txt")
+    # compare_persistent_files("Depth 11/persistent_depth11_pass3.json", "Depth 11/persistent_depth11_pass2.json")
+    # l = [10, 29, 113, 414, 1642, 7823, 39295, 209682]
+    # print("\n".join([f"{l[i-1]}, {ordered_total(0, 0, i)}" for i in range(1, 9)]))

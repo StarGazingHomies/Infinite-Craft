@@ -58,7 +58,8 @@ class OptimizerRecipeList:
         try:
             return self.ids[name.lower()]
         except KeyError:
-            print(f"{name} not found!")
+            # Silently ignore, because borked savefiles yay
+            # print(f"{name} not found!")
             return self.add_item(name)
 
     def get_generation_id(self, item_id: int) -> Optional[int]:

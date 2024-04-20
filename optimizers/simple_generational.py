@@ -1,3 +1,4 @@
+import util
 from optimizers.optimizer_interface import *
 
 
@@ -71,7 +72,12 @@ def optimize(
                 else:
                     cost_v = recipe_list.get_generation_id(v)
 
-            this_cost = max(cost_u, cost_v)  # - 1 / (min(cost_u, cost_v) + 1)
+            if u == v:
+                cost_v = 0
+
+            this_cost = util.pair_to_int(cost_u, cost_v)
+
+            # this_cost = max(cost_u, cost_v)  # - 1 / (min(cost_u, cost_v) + 1)
 
             if this_cost < min_cost:
                 min_cost = this_cost
@@ -132,8 +138,9 @@ def savefile_to_optimizer_recipes_oopsie(file: str) -> OptimizerRecipeList:
 
 def main():
     # optimize("Firebird", savefile_to_optimizer_recipes("../yui_optimizer_savefile.json"), 1000)
-    optimize("Lake", savefile_to_optimizer_recipes("../Savefiles/Other People/infinitecraft_14.json"), 1000)
-    # optimize("Chlorosulfuric Acid", savefile_to_optimizer_recipes("../yui_optimizer_missing.json"), 1000)
+    # optimize("Lake", savefile_to_optimizer_recipes("../Savefiles/Other People/infinitecraft_14.json"), 1000)
+    optimize("Chlorosulfuric Acid", savefile_to_optimizer_recipes("../yui_optimizer_missing.json"), 1000)
+    optimize("Flying Fish", savefile_to_optimizer_recipes("../yui_optimizer_missing.json"), 1000)
     pass
 
 

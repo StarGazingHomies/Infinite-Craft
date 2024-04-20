@@ -114,14 +114,12 @@ class RecipeHandler:
         # # Nothing is -1, local_nothing_indication is -2
         self.add_item_force_id("Nothing", '', False, -1)
         self.add_item_force_id(self.local_nothing_indication, '', False, -2)
-        #
+
         # # Get rid of "nothing"s, if we don't trust "nothing"s.
-        # if not self.trust_cache_nothing:
-        #     temp_set = frozenset(self.recipes_cache.items())
-        #     for ingredients, result in temp_set:
-        #         if result < 0:
-        #             self.recipes_cache[ingredients] = -2
-        #     save_json(self.recipes_cache, self.recipes_file)
+        if not self.trust_cache_nothing:
+            cur = self.db.cursor()
+            cur.execute("UPDATE recipes SET result_id = -2 WHERE result_id = -1")
+            self.db.commit()
 
     def close(self):
         if self.closed:
@@ -287,9 +285,12 @@ class RecipeHandler:
     #     return recipes
 
     # Adapted from analog_hors on Discord
-    async def combine(self, session: aiohttp.ClientSession, a: str, b: str) -> str:
+    async def combine(self, session: aiohttp.ClientSession, a: str, b: str, *, ignore_local: bool = False) -> str:
         # Query local cache
-        local_result = self.get_local(a, b)
+        local_result = None
+        if not ignore_local:
+            local_result = self.get_local(a, b)
+
         # print(f"Local result: {a} + {b} -> {local_result}")
         if local_result and local_result != self.local_nothing_indication:
             return local_result
@@ -384,12 +385,14 @@ async def main():
     #         letters2.append(l1 + l2)
     #
     rh = RecipeHandler([])
-    # headers = load_json("headers.json")["default"]
-    # async with aiohttp.ClientSession() as session:
-    #     async with session.get("https://neal.fun/infinite-craft/", headers=headers) as resp:
-    #         pass
-    #     await random_walk(rh, session, 5000)
-    print(rh.get_crafts("20"))
+    headers = load_json("headers.json")["default"]
+    async with aiohttp.ClientSession() as session:
+        async with session.get("https://neal.fun/infinite-craft/", headers=headers) as resp:
+            pass
+        # await random_walk(rh, session, 5000)
+        await rh.combine(session, "Ash", "Steam Zeus")
+    # print(rh.get_crafts("20"))
+    # print(f"Ash + Steam Zeus = {rh.get_local('Ash', 'Steam Zeus')}")
 
     # letter_recipes = {}
     # for two_letter_combo in letters2:
