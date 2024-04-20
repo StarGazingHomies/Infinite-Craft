@@ -1,4 +1,6 @@
+import asyncio
 import json
+import os
 import sys
 import time
 import traceback
@@ -7,6 +9,8 @@ from typing import Optional
 from urllib.parse import quote_plus
 from urllib.request import Request, urlopen
 import argparse
+
+import aiohttp
 
 import recipe
 
@@ -52,8 +56,13 @@ def parse_craft_file(filename: str, forced_delimiter: Optional[str] = None, *, i
             else:
                 print(f"Delimiter not found in line {i + 1}")
                 continue
-        ingredients, results = craft.split(delimiter)
-        ing1, ing2 = ingredients.split(' + ')
+
+        try:
+            ingredients, results = craft.split(delimiter)
+            ing1, ing2 = ingredients.split(' + ')
+        except ValueError:
+            print(f"Delimiter not found in line {i + 1}: {craft}")
+            continue
         if strict_order:
             if ing1 > ing2:
                 ing1, ing2 = ing2, ing1
@@ -62,12 +71,13 @@ def parse_craft_file(filename: str, forced_delimiter: Optional[str] = None, *, i
             ing1, ing2, results = ing1.lower(), ing2.lower(), results.lower()
         crafts_parsed.append((ing1, ing2, results))
         craft_count += 1
+
     return crafts_parsed
 
 
-def compare(original: str, new: str):
-    crafts = parse_craft_file(original, ignore_case=False, strict_order=True)
-    crafts2 = parse_craft_file(new, ignore_case=False, strict_order=True)
+def compare(original: str, new: str, *args, **kwargs):
+    crafts = parse_craft_file(original, *args, **kwargs)
+    crafts2 = parse_craft_file(new, *args, **kwargs)
     elements = set([craft[2] for craft in crafts])
     elements2 = set([craft[2] for craft in crafts2])
 
@@ -195,29 +205,30 @@ def static_check_script(filename: str, *args, **kwargs):
         loop_check_script(filename, *args, **kwargs)
 
 
-def dynamic_check_script(filename: str):
+async def dynamic_check_script(filename: str, *args, **kwargs) -> bool:
     global recipe_handler
     if recipe_handler is None:
         recipe_handler = recipe.RecipeHandler(("Water", "Fire", "Wind", "Earth"))
 
-    crafts = parse_craft_file(filename)
+    crafts = parse_craft_file(filename, *args, **kwargs)
 
     # Format: ... + ... -> ...
-    current = {"Earth": 0,
-               "Fire": 0,
-               "Water": 0,
-               "Wind": 0}
-    craft_count = 0
     has_issues = False
-    for i, craft in enumerate(crafts):
-        ing1, ing2, result = craft
-        true_result = recipe_handler.get_local(ing1.strip(), ing2.strip())
-        if true_result != result.strip():
-            has_issues = True
-            print(f"Craft {ing1} + {ing2} -> {result} is not correct. The correct response is {true_result}")
+    async with aiohttp.ClientSession() as session:
+        headers = recipe.load_json("headers.json")["default"]
+        async with session.get("https://neal.fun/infinite-craft/", headers=headers) as resp:
+            pass
+        for i, craft in enumerate(crafts):
+            ing1, ing2, result = craft
+            true_result = await recipe_handler.combine(session, ing1.strip(), ing2.strip())
+
+            if true_result != result.strip():
+                has_issues = True
+                print(f"Craft {ing1} + {ing2} -> {result} is not correct. The correct response is {true_result}")
 
     if not has_issues:
         print("All recipes are correct!")
+    return has_issues
 
 
 def count_uses(filename: str):
@@ -244,31 +255,26 @@ def count_uses(filename: str):
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Speedrun Checker')
-    parser.add_argument('action', type=str, help='Action to perform')
-    parser.add_argument('--file', type=str, help='File to read from')
+    parser.add_argument('action', type=str, help='Action to perform', choices=['static_check', 'dynamic_check', 'compare'])
+    parser.add_argument('file', type=str, help='File to read from')
+    parser.add_argument('file2', type=str, help='File to compare to. Ignored unless using the compare action.', nargs='?', default=None)
+    parser.add_argument('--ignore_case', action='store_true', help='Ignore case when parsing the file')
+    parser.add_argument('--strict_order', action='store_true', help='Enforce strict order of ingredients')
     return parser.parse_args()
 
 
 if __name__ == '__main__':
     pass
     # combine_element_pairs()
-    static_check_script('speedrun.txt', ignore_case=False)
-    # compare("Speedruns/curly quote a/curly_quote_a_A53.txt", "Speedruns/curly quote a/curly_quote_a_A49.txt")
-    # compare("Speedruns/neal.fun/speedrun_neal.fun_B29.txt", "Speedruns/neal.fun/speedrun_neal.fun_B25_g1_ldb_g2_d4.txt")
-    # static_check_script('speedrun_hashtag_fromcharcode.txt')
-    # best_recipes = load_best_recipes('expanded_recipes_depth_10.txt')
-    # count = 0
-    # for key in best_recipes:
-    #     for c in key:
-    #         if c.isalnum():
-    #             continue
-    #         if c == ' ':
-    #             continue
-    #         print(key)
-    #         break
-    # print(count)
-    # dynamic_check_script('speedrun3.txt')
-    # clean("speedrun.txt", "speedrun3.txt")
-    # add_element('speedrun.txt',
-    #                          "Bottle",
-    #             load_best_recipes('expanded_recipes_depth_10.txt'))
+    args = parse_args()
+    if args.action == 'static_check':
+        static_check_script(args.file, ignore_case=args.ignore_case)
+    elif args.action == 'dynamic_check':
+        if os.name == 'nt':
+            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+        asyncio.run(dynamic_check_script(args.file, ignore_case=args.ignore_case))
+    elif args.action == 'compare':
+        if args.file2 is None:
+            print("No file to compare to!")
+            sys.exit(1)
+        compare(args.file, args.file2, ignore_case=args.ignore_case, strict_order=args.strict_order)

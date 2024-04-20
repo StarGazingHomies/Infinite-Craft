@@ -1,8 +1,8 @@
 # Changelog
 
 TODO:
-- Better configuration (CLI arguments or config file)
-- Tokenizers (w/ transformers and a llama-like model, such as minillama)
+- Better configuration (CLI arguments)
+- Tokenizers & analysis (w/ transformers and a llama-like model, such as minillama)
 - Hybrid Step-Generation Preprocessing
 - N-Step-Lookahead Generational Algorithm for savefiles?
 Maybe even alpha-beta pruning?
@@ -11,6 +11,8 @@ Maybe even alpha-beta pruning?
 ## Version 1.5.1
 
 - Added command line arguments for `optimize.py`.
+- Added command line arguments for `speedrun.py`.
+- Added command line arguments for `main.py`.
 
 ## Version 1.5
 
