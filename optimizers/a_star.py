@@ -186,7 +186,7 @@ def optimize(
 
         # Save all optimal-steps states
         if current_state.is_complete():
-            print("Complete!")
+            print("Found first solution!")
             final_states.append(current_state)
             completed_steps = current_state.craft_count
             upper_bound = completed_steps
@@ -248,6 +248,8 @@ def optimize(
             print(
                 f"{recipe_list.get_name_capitalized(u)} + {recipe_list.get_name_capitalized(v)} -> {recipe_list.get_name_capitalized(result)}")
         print("\n---------------------------------------------------\n")
+
+    print("Optimization complete!")
 
     return final_states
 
