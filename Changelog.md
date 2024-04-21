@@ -17,17 +17,18 @@ Maybe even alpha-beta pruning?
 ## Version 1.5
 
 Added optimizers for speedrunning paths and finding optimal paths in savefiles!
-
-- Separated the `pair_to_int` and `int_to_pair` functions 
-along with static variables such as `DEFAULT_STARTING_ITEMS` 
-and `WORD_COMBINE_CHAR_LIMIT`into `util.py`.
-- Added a `OptimizerRecipeList` class for a common interface
-between all of the optimizers that will be implemented.
 - Added an A* algorithm `optimizers/a_star.py` starting from the result 
 element with a generation-based admissible heuristic. (Source: BRH0208)
 - Added a simple generational algorithm `optimizers/simple_generational.py` 
 starting from the result element with a generation-based heuristic, 
 made for fast analysis of savefiles. Used on yui's site (Infinite Craft Browser).
+
+Other changes
+- Separated the `pair_to_int` and `int_to_pair` functions 
+along with static variables such as `DEFAULT_STARTING_ITEMS` 
+and `WORD_COMBINE_CHAR_LIMIT`into `util.py`.
+- Added a `OptimizerRecipeList` class for a common interface
+between all the optimizers.
 
 ## Version 1.4
 

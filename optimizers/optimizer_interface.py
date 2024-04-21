@@ -29,6 +29,12 @@ class OptimizerRecipeList:
     gen: Optional[dict[int, int]]
     # Whether the generation has been generated, so nothing happens again
     gen_generated: bool = False
+    # Hybrid generation of each element
+    # item_id -> generation
+    hybrid_gen: Optional[dict[int, int]]
+    hybrid_gen_generated: bool = False
+    # Depth of each element, provided by external algorithm
+    depth: Optional[dict[int, int]]
 
     def __init__(self, items: list[str]):
         self.fwd = {}
@@ -39,6 +45,8 @@ class OptimizerRecipeList:
             self.ids[item.lower()] = i
             self.id_capitalized[i] = item
         self.gen = None
+        self.hybrid_gen = None
+        self.depth = {}
 
     def __str__(self):
         return f"OptimizerRecipeList with {len(self.ids)} items and {len(self.fwd)} recipes"
@@ -66,6 +74,32 @@ class OptimizerRecipeList:
         if self.gen is None:
             return None
         return self.gen.get(item_id)
+
+    def get_hybrid_generation_id(self, item_id: int) -> Optional[int]:
+        if self.hybrid_gen is None:
+            return None
+        return self.hybrid_gen.get(item_id)
+
+    def get_depth_id(self, item_id: int) -> Optional[int]:
+        if self.depth is None:
+            return None
+        return self.depth.get(item_id)
+
+    def get_best_minimum_bound(self, item_id: int) -> Optional[int]:
+        bounds = []
+        depth = self.get_depth_id(item_id)
+        if depth:
+            bounds.append(depth)
+        hybrid_generation = self.get_hybrid_generation_id(item_id)
+        if hybrid_generation:
+            bounds.append(hybrid_generation)
+        generation = self.get_generation_id(item_id)
+        if generation:
+            bounds.append(generation)
+
+        if len(bounds) == 0:
+            return None
+        return max(bounds)
 
     def add_recipe_id(self, result: int, ingredient1: int, ingredient2: int):
         # Add to backward
@@ -138,8 +172,8 @@ class OptimizerRecipeList:
 
         return
 
-    def hybrid_generations(self, num_steps: int = 5, init_items: list[str] = DEFAULT_STARTING_ITEMS) -> None:
-        # TODO: Hybrid IDDFS for full steps until num_steps, then generate generations
+    def generate_hybrid_generations(self, num_steps: int = 5, init_items: list[str] = DEFAULT_STARTING_ITEMS) -> None:
+        # TODO: Hybrid - IDDFS for full steps until num_steps, then generate generations
         # Likely a better heuristic than simple generations.
         # Trading a bit more precompute for faster algorithm execution / better heuristic.
         ...
