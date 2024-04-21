@@ -2,6 +2,7 @@ import atexit
 import json
 import math
 import os
+import random
 import sys
 import time
 import traceback
@@ -12,20 +13,8 @@ import aiohttp
 from bidict import bidict
 import sqlite3
 
-WORD_TOKEN_LIMIT = 20
-WORD_COMBINE_CHAR_LIMIT = 30
-
-
-def pair_to_int(i: int, j: int) -> int:
-    if j < i:
-        i, j = j, i
-    return i + (j * (j + 1)) // 2
-
-
-def int_to_pair(n: int) -> tuple[int, int]:
-    j = math.floor(((8 * n + 1) ** 0.5 - 1) / 2)
-    i = n - (j * (j + 1)) // 2
-    return i, j
+import util
+from util import int_to_pair, pair_to_int, WORD_COMBINE_CHAR_LIMIT
 
 
 # Insert a recipe into the database
@@ -64,28 +53,35 @@ def load_json(file: str) -> dict:
 class RecipeHandler:
     db: sqlite3.Connection
     db_location: str = "cache/recipes.db"
+    closed: bool = False
 
     last_request: float = 0
-    request_cooldown: float = 0.5  # 0.5s is safe for this API
+    request_cooldown: float = 0.5                # 0.5s is safe for this API
     sleep_time: float = 1.0
     sleep_default: float = 1.0
     retry_exponent: float = 2.0
-    local_only: bool = True
-    trust_cache_nothing: bool = True  # Trust the local cache for "Nothing" results
-    trust_first_run_nothing: bool = False  # Save as "Nothing" in the first run
+    local_only: bool = False
+    trust_cache_nothing: bool = True             # Trust the local cache for "Nothing" results
+    trust_first_run_nothing: bool = False        # Save as "Nothing" in the first run
     local_nothing_indication: str = "Nothing\t"  # Indication of untrusted "Nothing" in the local cache
-    nothing_verification: int = 3  # Verify "Nothing" n times with the API
-    nothing_cooldown: float = 5.0  # Cooldown between "Nothing" verifications
-    connection_timeout: float = 5.0  # Connection timeout
+    nothing_verification: int = 3                # Verify "Nothing" n times with the API
+    nothing_cooldown: float = 5.0                # Cooldown between "Nothing" verifications
+    connection_timeout: float = 10.0             # Connection timeout
+
+    print_new_recipes: bool = True
 
     headers: dict[str, str] = {}
 
-    def __init__(self, init_state):
+    def __init__(self, init_state, **kwargs):
+        # Key word arguments
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
         # Load headers
         self.headers = load_json("headers.json")["api"]
 
         self.db = sqlite3.connect(self.db_location)
-        atexit.register(lambda: (self.db.commit(), self.db.close()))
+        atexit.register(lambda: (self.close()))
         # Items table
         self.db.execute("""
             CREATE TABLE IF NOT EXISTS items (
@@ -118,14 +114,25 @@ class RecipeHandler:
         # # Nothing is -1, local_nothing_indication is -2
         self.add_item_force_id("Nothing", '', False, -1)
         self.add_item_force_id(self.local_nothing_indication, '', False, -2)
-        #
+
         # # Get rid of "nothing"s, if we don't trust "nothing"s.
-        # if not self.trust_cache_nothing:
-        #     temp_set = frozenset(self.recipes_cache.items())
-        #     for ingredients, result in temp_set:
-        #         if result < 0:
-        #             self.recipes_cache[ingredients] = -2
-        #     save_json(self.recipes_cache, self.recipes_file)
+        if not self.trust_cache_nothing:
+            cur = self.db.cursor()
+            cur.execute("UPDATE recipes SET result_id = -2 WHERE result_id = -1")
+            self.db.commit()
+
+    def close(self):
+        if self.closed:
+            return
+        self.db.commit()
+        self.db.close()
+        self.closed = True
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
 
     def add_item(self, item: str, emoji: str, first_discovery: bool = False):
         # print(f"Adding: {item} ({emoji})")
@@ -154,8 +161,16 @@ class RecipeHandler:
             print(e)
 
     def add_recipe(self, a: str, b: str, result: str):
+        a = util.to_start_case(a)
+        b = util.to_start_case(b)
         if a > b:
             a, b = b, a
+
+        # Note that only the *INGREDIENT* will be converted to start case element.
+        # because ingredient case does not matter.
+        # The results will not, since the case of the resultant item may be significant.
+        self.add_starting_item(a, "", False)
+        self.add_starting_item(b, "", False)
 
         # print(f"Adding: {a} + {b} -> {result}")
         cur = self.db.cursor()
@@ -181,7 +196,8 @@ class RecipeHandler:
         except KeyError:
             new = False
 
-        print(f"New Recipe: {a} + {b} -> {result}")
+        if self.print_new_recipes:
+            print(f"New Recipe: {a} + {b} -> {result}")
         if new:
             print(f"FIRST DISCOVERY: {a} + {b} -> {result}")
 
@@ -197,8 +213,11 @@ class RecipeHandler:
         self.add_recipe(a, b, result)
 
     def get_local(self, a: str, b: str) -> Optional[str]:
+        a = util.to_start_case(a)
+        b = util.to_start_case(b)
         if a > b:
             a, b = b, a
+
         cur = self.db.cursor()
         cur.execute(query_recipe, (a, b))
         result = cur.fetchone()
@@ -266,24 +285,14 @@ class RecipeHandler:
     #     return recipes
 
     # Adapted from analog_hors on Discord
-    async def combine(self, session: aiohttp.ClientSession, a: str, b: str) -> str:
+    async def combine(self, session: aiohttp.ClientSession, a: str, b: str, *, ignore_local: bool = False) -> str:
         # Query local cache
-        local_result = self.get_local(a, b)
+        local_result = None
+        if not ignore_local:
+            local_result = self.get_local(a, b)
+
         # print(f"Local result: {a} + {b} -> {local_result}")
         if local_result and local_result != self.local_nothing_indication:
-            # TODO: Censoring - temporary, to see how much of a change it has
-            # print(local_result)
-            # if ("slave" in local_result.lower() or
-            #         "terroris" in local_result.lower() or
-            #         "hamas" in local_result.lower() or
-            #         local_result.lower() == 'jew' or
-            #         local_result.lower() == "rape" or
-            #         local_result.lower() == "rapist" or
-            #         local_result.lower() == "pedophile" or
-            #         local_result.lower() == "aids" or
-            #         "Bin Laden" in local_result):
-            #     return "Nothing"
-
             return local_result
 
         if self.local_only:
@@ -300,7 +309,8 @@ class RecipeHandler:
             # Increases time taken on requests but should be worth it.
             # Also note that this can't be asynchronous due to all the optimizations I made assuming a search order
             time.sleep(self.nothing_cooldown)
-            print("Re-requesting Nothing result...", flush=True)
+            if self.print_new_recipes:
+                print("Re-requesting Nothing result...", flush=True)
 
             r = await self.request_pair(session, a, b)
 
@@ -331,9 +341,13 @@ class RecipeHandler:
                     # print(resp.status)
                     if resp.status == 200:
                         self.sleep_time = self.sleep_default
-                        return await resp.json()
+                        return await resp.json(content_type=None)
                     else:
                         print(f"Request failed with status {resp.status}", file=sys.stderr)
+                        if resp.status == 500:
+                            print(f"Internal Server Error when combining {a} + {b}", file=sys.stderr)
+                            return {"result": "Nothing\t", "emoji": "", "isNew": False}
+
                         time.sleep(self.sleep_time)
                         self.sleep_time *= self.retry_exponent
                         print("Retrying...", flush=True)
@@ -347,6 +361,18 @@ class RecipeHandler:
 
 
 # Testing code / temporary code
+async def random_walk(rh: RecipeHandler, session: aiohttp.ClientSession, steps: int):
+    current_items = set(util.DEFAULT_STARTING_ITEMS)
+    for i in range(steps):
+        a = list(current_items)[random.randint(0, len(current_items) - 1)]
+        b = list(current_items)[random.randint(0, len(current_items) - 1)]
+        result = await rh.combine(session, a, b)
+        if result != "Nothing":
+            current_items.add(result)
+        print(f"Step {i+1}: {a} + {b} -> {result}")
+    print(f"{len(current_items)} items: {current_items}")
+
+
 async def main():
     pass
     # letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J",
@@ -358,7 +384,16 @@ async def main():
     #     for l2 in letters:
     #         letters2.append(l1 + l2)
     #
-    # r = RecipeHandler([])
+    rh = RecipeHandler([])
+    headers = load_json("headers.json")["default"]
+    async with aiohttp.ClientSession() as session:
+        async with session.get("https://neal.fun/infinite-craft/", headers=headers) as resp:
+            pass
+        # await random_walk(rh, session, 5000)
+        await rh.combine(session, "Ash", "Steam Zeus")
+    # print(rh.get_crafts("20"))
+    # print(f"Ash + Steam Zeus = {rh.get_local('Ash', 'Steam Zeus')}")
+
     # letter_recipes = {}
     # for two_letter_combo in letters2:
     #     uses = r.get_uses(two_letter_combo)

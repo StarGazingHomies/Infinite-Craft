@@ -1,3 +1,4 @@
+import argparse
 import atexit
 import os
 import sys
@@ -11,13 +12,11 @@ import asyncio
 import aiohttp
 
 import recipe
+from util import int_to_pair, pair_to_int, DEFAULT_STARTING_ITEMS
 
-# import tracemalloc
+init_state: tuple[str, ...] = DEFAULT_STARTING_ITEMS
 
-
-init_state: tuple[str, ...] = ("Water", "Fire", "Wind", "Earth")
-
-# For people who want to start with a lot more things
+# For people who want to start with a lot more things, which makes using CLIs impractical
 elements = ["Hydrogen", "Helium", "Lithium", "Beryllium", "Boron", "Carbon", "Nitrogen", "Oxygen", "Fluorine", "Neon",
             "Sodium", "Magnesium", "Aluminium", "Silicon", "Phosphorus", "Sulfur", "Chlorine", "Argon", "Potassium",
             "Calcium", "Scandium", "Titanium", "Vanadium", "Chromium", "Manganese", "Iron", "Cobalt", "Nickel",
@@ -39,6 +38,9 @@ letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J",
 
 rearrange_words = ["Anagram", "Reverse", "Opposite", "Scramble", "Rearrange", "Palindrome", "Not"]
 
+speedrun_current_words = ["Lake", "Plant", "Lily", "Volcano", "Island", "Continent",
+                          "America", "USA", "Tea", "Taxes", "Filing", "File "]
+
 letters2 = []
 for l1 in letters:
     for l2 in letters:
@@ -46,43 +48,26 @@ for l1 in letters:
 
 # init_state = tuple(list(init_state) + elements + ["Periodic Table",])
 # init_state = tuple(list(init_state) + letters + letters2)
-recipe_handler = recipe.RecipeHandler(init_state)
-depth_limit = 11
-extra_depth = 1
+# init_state = tuple(list(init_state) + letters)
+# init_state = tuple(list(init_state) + speedrun_current_words)
 
 best_recipes: dict[str, list[list[tuple[str, str, str]]]] = dict()
 visited = set()
 best_depths: dict[str, int] = dict()
-best_recipes_file: str = "best_recipes.txt"
-all_best_recipes_file: str = "all_best_recipes_depth_10_filtered.json"
 persistent_file: str = "persistent.json"
 persistent_temporary_file: str = "persistent2.json"
-case_sensitive: bool = True
-allow_starting_elements: bool = False
-resume_last_run: bool = True
+
+recipe_handler: Optional[recipe.RecipeHandler] = recipe.RecipeHandler(init_state)
+depth_limit = 10
+extra_depth = 0
+case_sensitive = True
+allow_starting_elements = False
+resume_last_run = True
+
 last_game_state: Optional['GameState'] = None
 new_last_game_state: Optional['GameState'] = None
-autosave_interval = 500     # Save every 500 new visited elements
+autosave_interval = 500  # Save persistent file every 500 new visited elements
 autosave_counter = 0
-
-
-@cache
-def int_to_pair(n: int) -> tuple[int, int]:
-    if n < 0:
-        return -1, -1
-    j = 0
-    while n > j:
-        n -= j + 1
-        j += 1
-    i = n
-    return i, j
-
-
-@cache
-def pair_to_int(i: int, j: int) -> int:
-    if j < i:
-        i, j = j, i
-    return i + (j * (j + 1)) // 2
 
 
 @cache
@@ -149,19 +134,25 @@ class GameState:
         u, v = int_to_pair(i)
         craft_result = await recipe_handler.combine(session, self.items[u], self.items[v])
 
-        # Invalid crafts, items we already have, or items that can be crafted earlier are ignored.
-        if (craft_result is None or
-                craft_result == "Nothing" or
-                (not allow_starting_elements and craft_result in self.items) or
-                (allow_starting_elements and
-                 (craft_result == self.items[u] or craft_result == self.items[v] or
-                  (craft_result in self.items and self.used[self.items.index(craft_result)] != 0))) or
-                # Even though we are looking for results in the original list, we still
-                # Don't want to use the result itself in any craft
-                craft_result in self.children):
+        # Invalid crafts,
+        if craft_result is None or craft_result == "Nothing":
             return None
 
+        # If we don't allow starting elements
+        if not allow_starting_elements and craft_result in self.items:
+            return None
+
+        # If we allow starting elements to be crafted, such as searching for optimal periodic table entry points
+        # We can't craft a used starting element, because that forms a loop.
+        if allow_starting_elements:
+            if craft_result == self.items[u] or craft_result == self.items[v]:
+                return None
+            if craft_result in self.items and self.used[self.items.index(craft_result)] != 0:
+                return None
+
         # Make sure we never craft this ever again
+        if craft_result in self.children:
+            return None
         self.children.add(craft_result)
 
         # Construct the new state
@@ -265,9 +256,6 @@ async def dls(session: aiohttp.ClientSession, state: GameState, depth: int) -> i
 
 
 async def iterative_deepening_dfs(session: aiohttp.ClientSession):
-    # Clear best recipes file
-    if not resume_last_run:
-        open(best_recipes_file, "w").close()
 
     curDepth = 1
     start_time = time.perf_counter()
@@ -299,17 +287,15 @@ async def iterative_deepening_dfs(session: aiohttp.ClientSession):
 
 async def main():
     # tracemalloc.start()
+    if resume_last_run:
+        load_last_state()
+
     headers = recipe.load_json("headers.json")["default"]
     async with aiohttp.ClientSession() as session:
         async with session.get("https://neal.fun/infinite-craft/", headers=headers) as resp:
             print("Status:", resp.status)
             print("Content-type:", resp.headers['content-type'])
 
-            html = await resp.text()
-            # Save the html
-            # with open("infinite-craft.html", "w", encoding="utf-8") as file:
-            #     file.write(html)
-            # print("Body:", html[:15], "...")
             cookies = session.cookie_jar.filter_cookies('https://neal.fun/infinite-craft/')
             for key, cookie in cookies.items():
                 print('Key: "%s", Value: "%s"' % (cookie.key, cookie.value))
@@ -336,10 +322,6 @@ def load_last_state():
         last_game_state = None
 
 
-if resume_last_run:
-    load_last_state()
-
-
 @atexit.register
 def save_last_state():
     print("Autosaving progress...")
@@ -356,7 +338,28 @@ def save_last_state():
     os.replace(persistent_temporary_file, persistent_file)
 
 
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-s", "--starting-items", nargs="+", default=DEFAULT_STARTING_ITEMS, help="Starting items")
+    parser.add_argument("-d", "--depth", type=int, default=10, help="Depth limit")
+    parser.add_argument("-ed", "--extra_depth", type=int, default=0, help="Extra depth for laternate paths")
+    parser.add_argument("--case-sensitive", action="store_true", help="Case sensitive")
+    parser.add_argument("--allow-starting-elements", action="store_true", help="Allow starting elements")
+    parser.add_argument("--resume-last-run", action="store_true", help="Resume last run")
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
+    # Parse arguments
+    args = parse_args()
+    init_state = tuple(args.starting_items)
+    recipe_handler = recipe.RecipeHandler(init_state)
+    depth_limit = args.depth
+    extra_depth = args.extra_depth
+    case_sensitive = args.case_sensitive
+    allow_starting_elements = args.allow_starting_elements
+    resume_last_run = args.resume_last_run
+
     if os.name == 'nt':
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     asyncio.run(main())

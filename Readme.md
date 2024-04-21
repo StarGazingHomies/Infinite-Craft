@@ -8,26 +8,21 @@ Every time a new depth is completed, I will publish the recipes as a release.
 
 ## Usage
 
-TODO: Make this more usable!
+Requires python 3.11-3.12.
 
-Requires Python 3.9~3.11 (I'm not that familiar with Python versions, but
-there's a few different versions installed on each machine I've run this on)
+Install the required packages with:
+```commandline
+pip install -r requirements.txt
+```
 
-Run `main.py` to search.
+To run the script, simply run:
+```commandline
+python main.py
+```
 
-To edit any settings, edit `init_state` for your starting state if you
-have an existing recipe, and `recipe.py` for how recipes are handled.
-
-If you want to make sure your speedrun route has missing elements, 
-repeats, or unused elements, run `speedrun.txt`. It must be in the format
-of `x + y -> z` every line, except comment lines that start with `#`.
-
-There are two types of checks in `speedrun.txt`: static check makes sure
-that your speedrun route makes sense (no duplicates, no missing elements, no
-unused elements) while dynamic check makes requests to Neal's API to make sure
-that your speedrun route has correct crafts.
-
-Currently, the script does not accept CLI arguments.
+`speedrun.py` can help you check your speedrun recipes for errors.
+`optimize.py` can help you optimize your speedruns.
+Use `-h` for help with any CLI arguments.
 
 ## Methodology
 

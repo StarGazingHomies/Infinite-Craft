@@ -9,6 +9,7 @@ misc/*
 *.pyc
 *.txt
 *.json
+*.db
 
 # Spreadsheet wee
 3 letter spreadsheet/*
