@@ -1,15 +1,9 @@
+import argparse
 import asyncio
-import json
 import os
 import re
 import sys
-import time
-import traceback
-import urllib
 from typing import Optional
-from urllib.parse import quote_plus
-from urllib.request import Request, urlopen
-import argparse
 
 import aiohttp
 
@@ -36,6 +30,7 @@ recipe_handler = None
 # TODO: Use this class in all relevant functions
 class SpeedrunRecipe:
     crafts: list[tuple[str, str, str, bool]] = []  # Format: [0] + [1] -> [2], [3] indicates if the result is a target
+    # TODO: Some way to represent line number comments
     emotes: dict[str, str]  # Optional emotes storage. Unused for now.
     craft_counts: dict[str, int] = {}  # Unused for now
 
@@ -44,7 +39,7 @@ class SpeedrunRecipe:
 
     def __str__(self):
         return '\n'.join(
-            [f"{"\t" if craft[3] else ""}{craft[0]}  +  {craft[1]}  =  {craft[2]}" for craft in self.crafts])
+            [f"{craft[0]}  +  {craft[1]}  =  {craft[2]}{'  // @result' if craft[3] else ''}" for craft in self.crafts])
 
     __repr__ = __str__
 
@@ -75,7 +70,7 @@ class SpeedrunRecipe:
                     current_str += "```"
                 current_str += f"```{cur_lang}\n"
                 last_lang = cur_lang
-            current_str += f"{craft[0]}  +  {craft[1]}  =  {craft[2]}\n"
+            current_str += f"{craft[0]}  +  {craft[1]}  =  {craft[2]}{'  // @result' if craft[3] else ''}\n"
 
         current_str += "```"
         return current_str
@@ -85,27 +80,36 @@ def parse_craft_file(filename: str) -> SpeedrunRecipe:
     with open(filename, 'r', encoding='utf-8') as file:
         text = file.read()
 
-    # Remove all comments (c-style)
-    # Multi-line
-    text = re.sub(r'/\*.*?\*/', '', text, flags=re.DOTALL)
-    # Single-line
-    text = re.sub(r'//.*', '', text)
+    # Remove multiline comments
+    # Multi-line - ignored
+    # Note that comments have to start with either a newline or 2 spaces.
+    text = re.sub(r'(\\s{2}|^)/\*.*?\*/', '', text, flags=re.DOTALL)
 
     crafts: list[tuple[str, str, str, bool]] = []
     target_count = 0
+    comment_warning = False
 
     for i, line in enumerate(text.split('\n')):
-        if not line.strip():
-            continue
-        # TODO: Confirm this as the agreed upon way to indicate result element.
         try:
-            target = line[0] in ['\t', ' ']
+            # Line comment
+            comment = re.search("(\\s{2}|^)//.*", line)
+            if comment:
+                line = line[:comment.start()]
+                comment = comment.group(0)
+            if not line.strip():
+                continue
+            # Target element indicated by @result within a comment
+            target = "@result" in comment if comment else False
             target_count += target
+
+            # Warning if you're using single spaced comments
+            if not comment_warning and "//" in line:
+                comment_warning = True
+                print(f"Warning: Double slashes found in line {i+1}: {line}. If this is a comment, use double spaces instead.")
 
             line = line.strip()
             ingredients, result = line.split('  =  ')
             ing1, ing2 = ingredients.split('  +  ')
-            print(ing1, ing2, result, target)
 
             if "  " in ing1:
                 ing1_emote, ing1 = ing1.split("  ")
@@ -184,11 +188,11 @@ def parse_craft_file_old(filename: str, forced_delimiter: Optional[str] = None, 
     return SpeedrunRecipe(crafts_parsed)
 
 
-def compare(original: str, new: str, *args, **kwargs):
-    crafts = parse_craft_file(original)
-    crafts2 = parse_craft_file(new)
-    elements = set(crafts.results)
-    elements2 = set(crafts2.results)
+def compare(original: SpeedrunRecipe, new: SpeedrunRecipe):
+    crafts = original.crafts
+    crafts2 = new.crafts
+    elements = set(original.results)
+    elements2 = set(new.results)
 
     # print(set([str(craft) for craft in crafts]))
     # print(set([str(craft) for craft in crafts2]))
@@ -228,8 +232,7 @@ def compare(original: str, new: str, *args, **kwargs):
     return
 
 
-def simple_check_script(filename: str, *args, **kwargs) -> tuple[bool, bool, bool]:
-    crafts = parse_craft_file(filename)
+def simple_check_script(speedrun_recipe: SpeedrunRecipe) -> tuple[bool, bool, bool]:
     has_duplicates = False
     has_misplaced = False
     has_missing = False
@@ -241,7 +244,7 @@ def simple_check_script(filename: str, *args, **kwargs) -> tuple[bool, bool, boo
                "wind": 0}
     crafted = set()
     possible_misplaced = set()
-    for i, craft in enumerate(crafts):
+    for i, craft in enumerate(speedrun_recipe.crafts):
         ing1, ing2, result, is_target = craft
         ing1, ing2, result = ing1.lower(), ing2.lower(), result.lower()
 
@@ -280,15 +283,15 @@ def simple_check_script(filename: str, *args, **kwargs) -> tuple[bool, bool, boo
     return has_duplicates, has_misplaced, has_missing
 
 
-def loop_check_script(filename, *args, **kwargs) -> bool:
-    crafts = parse_craft_file(filename, *args, **kwargs)
+def loop_check_script(speedrun_recipe: SpeedrunRecipe) -> bool:
+    crafts = speedrun_recipe.crafts
     cur_elements = {"earth", "fire", "water", "wind"}
     new_order = []
 
     while len(cur_elements) < len(crafts) + 4:
         has_changes = False
         for i, craft in enumerate(crafts):
-            ing1, ing2, result, isresult = craft
+            ing1, ing2, result, is_result = craft
             ing1, ing2, result = ing1.lower(), ing2.lower(), result.lower()
             if ing1 in cur_elements and ing2 in cur_elements and result not in cur_elements:
                 cur_elements.add(result)
@@ -307,19 +310,19 @@ def loop_check_script(filename, *args, **kwargs) -> bool:
     return True
 
 
-def static_check_script(filename: str, *args, **kwargs):
-    result = simple_check_script(filename, *args, **kwargs)
+def static_check_script(speedrun_recipe: SpeedrunRecipe):
+    result = simple_check_script(speedrun_recipe)
     if not result[0] and result[1] and not result[2]:
         print("Trying to correct for misplaced elements...")
-        loop_check_script(filename, *args, **kwargs)
+        loop_check_script(speedrun_recipe)
 
 
-async def dynamic_check_script(filename: str, *args, **kwargs) -> bool:
+async def dynamic_check_script(speedrun_recipe: SpeedrunRecipe) -> bool:
     global recipe_handler
     if recipe_handler is None:
         recipe_handler = recipe.RecipeHandler(("Water", "Fire", "Wind", "Earth"))
 
-    crafts = parse_craft_file(filename, *args, **kwargs)
+    crafts = speedrun_recipe.crafts
 
     # Format: ... + ... -> ...
     has_issues = False
@@ -340,54 +343,38 @@ async def dynamic_check_script(filename: str, *args, **kwargs) -> bool:
     return has_issues
 
 
-def count_uses(filename: str):
-    # ONLY USE THIS FOR A CORRECT FILE
-    with open(filename, 'r') as file:
-        crafts = file.readlines()
-
-    # Format: ... + ... -> ...
-    current = {"Earth": 0,
-               "Fire": 0,
-               "Water": 0,
-               "Wind": 0}
-    for i, craft in enumerate(crafts):
-        if craft == '\n':
-            continue
-        ingredients, results = craft.split(' -> ')
-        ing1, ing2 = ingredients.split(' + ')
-        current[ing1.strip()] += 1
-        current[ing2.strip()] += 1
-        current[results.strip()] = 0
-
-    print(current)
+def to_discord_message(speedrun_recipe: SpeedrunRecipe, default_language="ruby", highlight_language="fix") -> str:
+    print(speedrun_recipe.to_discord_message(default_language, highlight_language))
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Speedrun Checker')
     parser.add_argument('action', type=str, help='Action to perform',
-                        choices=['static_check', 'dynamic_check', 'compare'])
+                        choices=['static_check', 'dynamic_check', 'compare', 'to_discord'])
     parser.add_argument('file', type=str, help='File to read from')
     parser.add_argument('file2', type=str, help='File to compare to. Ignored unless using the compare action.',
                         nargs='?', default=None)
-    parser.add_argument('--ignore_case', action='store_true', help='Ignore case when parsing the file')
-    parser.add_argument('--strict_order', action='store_true', help='Enforce strict order of ingredients')
     return parser.parse_args()
 
 
 if __name__ == '__main__':
     pass
-    speedrun = parse_craft_file("speedrun.txt")
-    print(speedrun.to_discord_message())
-    # combine_element_pairs()
-    # args = parse_args()
-    # if args.action == 'static_check':
-    #     static_check_script(args.file, ignore_case=args.ignore_case)
-    # elif args.action == 'dynamic_check':
-    #     if os.name == 'nt':
-    #         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    #     asyncio.run(dynamic_check_script(args.file, ignore_case=args.ignore_case))
-    # elif args.action == 'compare':
-    #     if args.file2 is None:
-    #         print("No file to compare to!")
-    #         sys.exit(1)
-    #     compare(args.file, args.file2, ignore_case=args.ignore_case, strict_order=args.strict_order)
+    args = parse_args()
+    if args.action == 'static_check':
+        file = parse_craft_file(args.file)
+        static_check_script(file)
+    elif args.action == 'dynamic_check':
+        if os.name == 'nt':
+            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+        file = parse_craft_file(args.file)
+        asyncio.run(dynamic_check_script(file))
+    elif args.action == 'compare':
+        if args.file2 is None:
+            print("No file to compare to!")
+            sys.exit(1)
+        file1 = parse_craft_file(args.file)
+        file2 = parse_craft_file(args.file2)
+        compare(file1, file2)
+    elif args.action == 'to_discord':
+        file = parse_craft_file(args.file)
+        to_discord_message(file)
