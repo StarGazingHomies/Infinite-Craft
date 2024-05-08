@@ -60,7 +60,16 @@ class SpeedrunRecipe:
     def targetList(self) -> list[str]:
         return [craft[2] for craft in self.crafts if craft[3]]
 
-    def to_discord_message(self, default_language="ruby", highlight_language="fix") -> str:
+    def to_discord_message(self, default_language="prolog", highlight_language=None) -> str:
+        # Note on languages:
+        # Typescript - purple
+        # Prolog - orange
+        # Scala - funny
+        if not highlight_language:
+            if len(self.targetList) == 1:
+                highlight_language = "fix"
+            else:
+                highlight_language = default_language
         current_str = ""
         last_lang = None
         for craft in self.crafts:
@@ -75,6 +84,13 @@ class SpeedrunRecipe:
         current_str += "```"
         return current_str
 
+    def to_discord_asciidoc(self) -> str:
+        current_str = "```asciidoc\n"
+        for craft in self.crafts:
+            current_str += f"{craft[0]}  +  {craft[1]}  =  {craft[2]}{'  // @result :: ' if craft[3] else ''}\n"
+        current_str += "```"
+        return current_str
+
 
 def parse_craft_file(filename: str) -> SpeedrunRecipe:
     with open(filename, 'r', encoding='utf-8') as file:
@@ -83,7 +99,7 @@ def parse_craft_file(filename: str) -> SpeedrunRecipe:
     # Remove multiline comments
     # Multi-line - ignored
     # Note that comments have to start with either a newline or 2 spaces.
-    text = re.sub(r'(\\s{2}|^)/\*.*?\*/', '', text, flags=re.DOTALL)
+    text = re.sub('(\\s{2}|\n)/\\*.*?\\*/', '', text, flags=re.DOTALL)
 
     crafts: list[tuple[str, str, str, bool]] = []
     target_count = 0
@@ -343,8 +359,8 @@ async def dynamic_check_script(speedrun_recipe: SpeedrunRecipe) -> bool:
     return has_issues
 
 
-def to_discord_message(speedrun_recipe: SpeedrunRecipe, default_language="ruby", highlight_language="fix") -> str:
-    print(speedrun_recipe.to_discord_message(default_language, highlight_language))
+def to_discord_message(speedrun_recipe: SpeedrunRecipe):
+    print(speedrun_recipe.to_discord_message())
 
 
 def parse_args():
@@ -377,4 +393,5 @@ if __name__ == '__main__':
         compare(file1, file2)
     elif args.action == 'to_discord':
         file = parse_craft_file(args.file)
-        to_discord_message(file)
+        # to_discord_message(file)
+        print(file.to_discord_asciidoc())

@@ -13,6 +13,21 @@ Maybe even alpha-beta pruning (using heuristic)?
 - Crafting Tree Location File Generation?
 - OptimizerRecipeList and RecipeHandler common interface
 
+## Version 1.5.2 (in progress)
+
+- Added `SpeedrunRecipe` to store speedrun recipes.
+- Speedruns now follow the following format:
+```prolog
+Water  +  Earth  =  Plant  // Comments require two spaces before them
+Earth  +  Plant  =  Tree  // Note that there are doube spaces around + and =
+// Or they can be at the start of a line
+/*
+And multiline comments go like this
+*/
+Water  +  Tree  /* Or even like this, but there must be two spaces! */  =  River
+Earth  +  Tree  =  Forest  // @result indicates that this is a result element
+```
+
 ## Version 1.5.1
 
 - Added command line arguments for `optimize.py`.
