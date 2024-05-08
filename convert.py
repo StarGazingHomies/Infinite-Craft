@@ -497,7 +497,7 @@ def generate_single_best_recipe(input_file: str, output_file: str):
     except FileNotFoundError:
         best_recipes = {}
 
-    MAX_DEPTH = 12
+    MAX_DEPTH = 16
     recipe_list = [[] for _ in range(MAX_DEPTH + 1)]
     for key, value in best_recipes.items():
         if len(value[0]) > MAX_DEPTH:
@@ -854,7 +854,7 @@ if __name__ == '__main__':
     pass
     # analyze_minus_claus("Searches/Minus Claus/minus_claus_data2.json",
     #                     "Depth 11/persistent_depth11_pass3.json")
-    merge_sql("Depth 11/recipes_depth11_pass3.db")
+    # merge_sql("Depth 11/recipes_depth11_pass3.db")
     # input()
     # eeeing_binary_to_text(input())    # binary_to_eeeing("Yes, I most certainly have decoded the message. How have you been rom?")
     # binary_to_eeeing("Nini rom, may Luna bless your dreams tonight")
@@ -862,7 +862,7 @@ if __name__ == '__main__':
     # if os.name == 'nt':
     #     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     # asyncio.run(main())
-    # generate_single_best_recipe("Depth 11/persistent_depth11_pass3.json", "Depth 11/best_recipes_depth_11_pass3.txt")
+    generate_single_best_recipe("persistent.json", "water.txt")
     # compare_persistent_files("Depth 11/persistent_depth11_pass3.json", "Depth 11/persistent_depth11_pass2.json")
     # l = [10, 29, 113, 414, 1642, 7823, 39295, 209682]
     # print("\n".join([f"{l[i-1]}, {ordered_total(0, 0, i)}" for i in range(1, 9)]))

@@ -29,7 +29,7 @@ class OptimizerRecipeList:
     gen: Optional[dict[int, int]]
     # Whether the generation has been generated, so nothing happens again
     gen_generated: bool = False
-    # Hybrid generation of each element
+    # TODO: Hybrid generation of each element
     # item_id -> generation
     hybrid_gen: Optional[dict[int, int]]
     hybrid_gen_generated: bool = False
@@ -41,9 +41,10 @@ class OptimizerRecipeList:
         self.bwd = {}
         self.ids = bidict()
         self.id_capitalized = {}
-        for i, item in enumerate(items):
-            self.ids[item.lower()] = i
-            self.id_capitalized[i] = item
+        for item in items:
+            if item.lower() in self.ids:
+                continue
+            self.add_item(item)
         self.gen = None
         self.hybrid_gen = None
         self.depth = {}
@@ -52,9 +53,15 @@ class OptimizerRecipeList:
         return f"OptimizerRecipeList with {len(self.ids)} items and {len(self.fwd)} recipes"
 
     def add_item(self, item: str) -> int:
-        self.ids[item.lower()] = len(self.ids)
-        self.id_capitalized[len(self.ids) - 1] = item
-        return len(self.ids) - 1
+        # Why does this check need to exist?
+        # if item.lower() in self.ids:
+        #     return self.ids[item.lower()]
+
+        new_id = len(self.ids)
+        print(new_id)
+        self.ids[item.lower()] = new_id
+        self.id_capitalized[new_id] = item
+        return new_id
 
     def get_name(self, item_id: int) -> str:
         return self.ids.inv[item_id]
@@ -68,7 +75,7 @@ class OptimizerRecipeList:
         except KeyError:
             # Silently ignore, because borked savefiles yay
             # print(f"{name} not found!")
-            return self.add_item(name)
+            return self.add_item(name.lower())
 
     def get_generation_id(self, item_id: int) -> Optional[int]:
         if self.gen is None:
@@ -193,6 +200,21 @@ def savefile_to_optimizer_recipes(file: str) -> OptimizerRecipeList:
             optimizer.add_recipe_name(result, recipe[0]['text'], recipe[1]['text'])
 
     return optimizer
+
+
+def optimizer_recipes_to_savefile(optimizer: OptimizerRecipeList) -> dict:
+    recipes_raw = {}
+    for result, recipe_list in optimizer.bwd.items():
+        recipes_raw[optimizer.get_name(result)] = [({"text": optimizer.get_name(ingredient1)}, {"text": optimizer.get_name(ingredient2)}) for ingredient1, ingredient2 in recipe_list]
+
+    elements_raw = [{"text": optimizer.get_name_capitalized(i)} for i in range(len(optimizer.ids))]
+
+    data = {
+        "recipes": recipes_raw,
+        "elements": elements_raw
+    }
+
+    return data
 
 
 def main():

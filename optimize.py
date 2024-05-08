@@ -1,7 +1,9 @@
 # Speedrun Optimizer
+import json
 import os
 import asyncio
 import argparse
+import time
 
 import aiohttp
 
@@ -10,15 +12,10 @@ import speedrun
 import util
 import optimizers.a_star as a_star
 import optimizers.simple_generational as simple_generational
-from optimizers.optimizer_interface import OptimizerRecipeList
+from optimizers.optimizer_interface import OptimizerRecipeList, optimizer_recipes_to_savefile
 
 
-# TODO: 2 types of optimization
-# 1. In-place: No new elements, only look at subsets of original that can be crafted
-# 2. Limited-depth: Allow new elements up to a certain deviation from the original path
-# Algorithms:
-# a) iddfs (top-down - low depth ONLY!)
-# b) A* (bottom-up, single destination)
+# A* (bottom-up, single destination)
 
 # The actual algorithms are implemented in the `optimizers/` folder
 # The interface is implemented in `optimizer_interface.py`
@@ -64,6 +61,26 @@ async def get_all_recipes(session: aiohttp.ClientSession, rh: recipe.RecipeHandl
     return recipes
 
 
+def get_all_local_recipes(rh: recipe.RecipeHandler, items: list[str]):
+    total_recipe_count = len(items) * (len(items) + 1) // 2
+    current_recipe = 0
+    # Only store valid recipes
+    recipes = []
+    items_set = set([item.lower() for item in items])
+    for u, item1 in enumerate(items):
+        for item2 in items[u:]:
+            new_item = rh.get_local(item1, item2)
+            if new_item.lower() in items_set:
+                recipes.append((item1, item2, new_item))
+            current_recipe += 1
+
+            cur_precentage = int(current_recipe / total_recipe_count * 100)
+            last_precentage = int((current_recipe - 1) / total_recipe_count * 100)
+            if cur_precentage != last_precentage:
+                print(f"Recipe Progress: {cur_precentage}% ({current_recipe}/{total_recipe_count})")
+    return recipes
+
+
 async def initialize_optimizer(
         session: aiohttp.ClientSession,
         rh: recipe.RecipeHandler,
@@ -74,13 +91,13 @@ async def initialize_optimizer(
     for i in range(extra_generations):
         new_items = await request_extra_generation(session, rh, items)
         items.extend(new_items)
-        print(f"Generation {i + 1} complete with {len(new_items)} new items.")
+        print(f"Generation {i+1} complete with {len(new_items)} new items.")
 
     # Get extra local generations
     for i in range(local_generations):
         new_items = get_local_generation(rh, items)
         items.extend(new_items)
-        print(f"Local Generation {i + 1} complete with {len(new_items)} new items.")
+        print(f"Local Generation {1 + i + extra_generations} complete with {len(new_items)} new items.")
 
     # Get all recipes
     recipes = await get_all_recipes(session, rh, items)
@@ -98,9 +115,12 @@ async def main(*,
                deviation: int = -1,
                target: list[str] = None,
                local_only: bool = False):
+    # Start timer
+    start_time = time.perf_counter()
+
     # Parse crafts file
     crafts = speedrun.parse_craft_file(file, ignore_case=ignore_case)
-    craft_results = [crafts[2] for crafts in crafts]
+    craft_results = [craft[2] for craft in crafts]
     if target is None:
         target = [craft_results[-1], ]
     max_crafts = len(crafts)
@@ -126,13 +146,13 @@ async def main(*,
     initial_crafts = [optimizer_recipes.get_id(item) for item in list(util.DEFAULT_STARTING_ITEMS) + craft_results]
 
     # Artificial targets, when args just don't cut it because there's too many
-    # alphabets = [chr(i) for i in range(65, 91)]
-    # target = []
-    # for c in alphabets:
-    #     target.append(c)
-    #     target.append(f".{c}")
-    #     target.append(f"\"{c}\"")
-    # print(target)
+    alphabets = [chr(i) for i in range(ord('a'), ord('z') + 1)]
+    target = []
+    for c in alphabets:
+        target.append(c)
+        target.append(f".{c}")
+        target.append(f"\"{c}\"")
+    print(target)
 
     # gen_1_pokemon = ['Lapras', 'Squirtle', 'Charizard', 'Magikarp', 'Magmar', 'Pikachu', 'Pidgey', 'Pidgeotto', 'Pidgeot', 'Gyarados', 'Raichu', 'Kingler', 'Blastoise', 'Charmander', 'Charmeleon', 'Bulbasaur', 'Ivysaur', 'Venusaur', 'Geodude', 'Graveler', 'Golem', 'Dragonite', 'Dragonair', 'Seadra', 'Omastar', 'Omanyte', 'Arcanine', 'Flareon', 'Vaporeon', 'Jolteon', 'Eevee', 'Aerodactyl', 'Moltres', 'Zapdos', 'Articuno', 'Cubone', 'Marowak', 'Oddish', 'Gloom', 'Vileplume', 'Jigglypuff', 'Wigglytuff', 'Grimer', 'Muk', 'Koffing', 'Weezing', 'Golduck', 'Psyduck', 'Weedle', 'Kakuna', 'Beedrill', 'Caterpie', 'Butterfree', 'Mewtwo', 'Mew', 'Hitmonlee', 'Hitmonchan', 'Meowth', 'Persian', 'Slowbro', 'Spearow', 'Fearow', 'Zubat', 'Golbat', 'Seaking', 'Goldeen', 'Sandshrew', 'Sandslash', 'Vulpix', 'Ninetales', 'Growlithe', 'Chansey', 'Snorlax', "Farfetch’d", 'Shellder', 'Cloyster', 'Mr. Mime', 'Arbok', 'Scyther', 'Onix', 'Ditto', 'Metapod', 'Dodrio', 'Doduo', 'Kangaskhan', 'Jynx', 'Ekans', 'Wartortle', 'Drowzee', 'Hypno', 'Poliwrath', 'Poliwhirl', 'Poliwag', 'Krabby', 'Nidoking', 'Weepinbell', 'Victreebel', 'Bellsprout', 'Raticate', 'Rattata', 'Porygon', 'Tauros', 'Slowpoke', 'Horsea', 'Nidoran', 'Nidorina', 'Nidoqueen', 'Nidorino', 'Magneton', 'Magnemite', 'Starmie', 'Staryu', 'Lickitung', 'Exeggcute', 'Exeggutor', 'Abra', 'Kadabra', 'Alakazam', 'Tentacruel', 'Tentacool', 'Pinsir', 'Clefairy', 'Clefable', 'Paras', 'Parasect', 'Gastly', 'Haunter', 'Gengar', 'Ponyta', 'Rapidash', 'Rhyhorn', 'Rhydon', 'Seel', 'Dewgong', 'Venomoth', 'Venonat', 'Diglett', 'Dugtrio', 'Electrode', 'Voltorb', 'Kabutops', 'Kabuto', 'Tangela', 'Dratini', 'Primeape', 'Machamp', 'Machoke', 'Machop', 'Mankey', 'Electabuzz', 'Missingno']
     # target = gen_1_pokemon
@@ -143,6 +163,21 @@ async def main(*,
     # Run the optimizer
     print(f"Optimizing for {target}...")
     a_star.optimize(target, optimizer_recipes, max_crafts, initial_crafts, deviation)
+
+    # optimization_args = {
+    #     "targets": target,
+    #     "upper_bound": max_crafts,
+    #     "deviation": deviation,
+    #     "initial_crafts": initial_crafts,
+    #     "recipes": optimizer_recipes_to_savefile(optimizer_recipes)
+    # }
+    #
+    # with open("a_star_benchmark_infinite_craft_D21.json", "w") as f:
+    #     json.dump(optimization_args, f, indent=4)
+
+    # End timer
+    end_time = time.perf_counter()
+    print(f"Time taken: {end_time - start_time:.3f}s")
 
 
 def parse_arguments():

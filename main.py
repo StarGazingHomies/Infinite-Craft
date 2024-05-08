@@ -50,6 +50,7 @@ for l1 in letters:
 # init_state = tuple(list(init_state) + letters + letters2)
 # init_state = tuple(list(init_state) + letters)
 # init_state = tuple(list(init_state) + speedrun_current_words)
+# init_state = ["Water"]
 
 best_recipes: dict[str, list[list[tuple[str, str, str]]]] = dict()
 visited = set()
@@ -58,7 +59,7 @@ persistent_file: str = "persistent.json"
 persistent_temporary_file: str = "persistent2.json"
 
 recipe_handler: Optional[recipe.RecipeHandler] = recipe.RecipeHandler(init_state)
-depth_limit = 10
+depth_limit = 18
 extra_depth = 0
 case_sensitive = True
 allow_starting_elements = False
@@ -351,14 +352,14 @@ def parse_args():
 
 if __name__ == "__main__":
     # Parse arguments
-    args = parse_args()
-    init_state = tuple(args.starting_items)
-    recipe_handler = recipe.RecipeHandler(init_state)
-    depth_limit = args.depth
-    extra_depth = args.extra_depth
-    case_sensitive = args.case_sensitive
-    allow_starting_elements = args.allow_starting_elements
-    resume_last_run = args.resume_last_run
+    # args = parse_args()
+    # init_state = tuple(args.starting_items)
+    # recipe_handler = recipe.RecipeHandler(init_state)
+    # depth_limit = args.depth
+    # extra_depth = args.extra_depth
+    # case_sensitive = args.case_sensitive
+    # allow_starting_elements = args.allow_starting_elements
+    # resume_last_run = args.resume_last_run
 
     if os.name == 'nt':
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())

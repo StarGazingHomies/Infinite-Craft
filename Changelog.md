@@ -1,12 +1,17 @@
 # Changelog
 
 TODO:
+- Standardized Speedrun Lineages
 - Better configuration (CLI arguments)
 - Tokenizers & analysis (w/ transformers and a llama-like model, such as minillama)
 - Hybrid Step-Generation Preprocessing
-- N-Step-Lookahead Generational Algorithm for savefiles?
-Maybe even alpha-beta pruning?
-
+- N-Step-Lookahead Generational Algorithm?
+Maybe even alpha-beta pruning (using heuristic)?
+- In-place Procedural Removal
+- Visualization (trees!)
+- Split persistent.json into different files
+- Crafting Tree Location File Generation?
+- OptimizerRecipeList and RecipeHandler common interface
 
 ## Version 1.5.1
 

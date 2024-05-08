@@ -291,6 +291,10 @@ class RecipeHandler:
         if not ignore_local:
             local_result = self.get_local(a, b)
 
+        # TODO: Re-request Nothing SETTING instead of db command
+        # if local_result == "Nothing":
+        #     local_result = "Nothing\t"
+
         # print(f"Local result: {a} + {b} -> {local_result}")
         if local_result and local_result != self.local_nothing_indication:
             return local_result
@@ -385,12 +389,14 @@ async def main():
     #         letters2.append(l1 + l2)
     #
     rh = RecipeHandler([])
-    headers = load_json("headers.json")["default"]
-    async with aiohttp.ClientSession() as session:
-        async with session.get("https://neal.fun/infinite-craft/", headers=headers) as resp:
-            pass
-        # await random_walk(rh, session, 5000)
-        await rh.combine(session, "Ash", "Steam Zeus")
+    for combo in rh.get_crafts("Twitter"):
+        print(f"{combo[0]} + {combo[1]} -> Twitter")
+    # headers = load_json("headers.json")["default"]
+    # async with aiohttp.ClientSession() as session:
+    #     async with session.get("https://neal.fun/infinite-craft/", headers=headers) as resp:
+    #         pass
+    #     # await random_walk(rh, session, 5000)
+    #     await rh.combine(session, "Ash", "Steam Zeus")
     # print(rh.get_crafts("20"))
     # print(f"Ash + Steam Zeus = {rh.get_local('Ash', 'Steam Zeus')}")
 
