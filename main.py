@@ -52,9 +52,10 @@ for l1 in letters:
 # init_state = tuple(list(init_state) + speedrun_current_words)
 # init_state = ["Water"]
 
-best_recipes: dict[str, list[list[tuple[str, str, str]]]] = dict()
+# best_recipes: dict[str, list[list[tuple[str, str, str]]]] = dict()
 visited = set()
 best_depths: dict[str, int] = dict()
+num_optimal_recipes: dict[str, int] = dict()
 persistent_file: str = "persistent.json"
 persistent_temporary_file: str = "persistent2.json"
 
@@ -191,7 +192,7 @@ def process_node(state: GameState):
         if autosave_counter >= autosave_interval:
             autosave_counter = 0
             save_last_state()
-        # Still write to best_recipes.txt file
+        # Still write to best_recipes.txt file?
         # with open(best_recipes_file, "a", encoding="utf-8") as file:
         #     file.write(f"{len(visited)}: {state}\n\n")
 
@@ -199,9 +200,11 @@ def process_node(state: GameState):
     depth = len(state) - len(init_state)
     if state.tail_item() not in best_depths:
         best_depths[state.tail_item()] = depth
-        best_recipes[state.tail_item()] = [state.to_list(), ]
+        # TODO: Write to specific file
+        # best_recipes[state.tail_item()] = [state.to_list(), ]
     elif depth <= best_depths[state.tail_item()] + extra_depth:
-        best_recipes[state.tail_item()].append(state.to_list())
+        pass
+        # best_recipes[state.tail_item()].append(state.to_list())
 
 
 # Depth limited search
@@ -305,7 +308,7 @@ async def main():
 
 
 def load_last_state():
-    global new_last_game_state, last_game_state, visited, best_depths, best_recipes
+    global new_last_game_state, last_game_state, visited, best_depths, num_optimal_recipes
     try:
         with open(persistent_file, "r", encoding="utf-8") as file:
             last_state_json = json.load(file)
@@ -316,8 +319,8 @@ def load_last_state():
             []
         )
         new_last_game_state = last_game_state
-        visited = set(last_state_json["Visited"])
-        best_recipes = last_state_json["BestRecipes"]
+        visited = set(last_state_json["BestDepths"].keys())
+        num_optimal_recipes = last_state_json["NumRecipes"]
         best_depths = last_state_json["BestDepths"]
     except FileNotFoundError:
         last_game_state = None
@@ -330,9 +333,8 @@ def save_last_state():
         return
     last_state_json = {
         "GameState": new_last_game_state.state,
-        "Visited": list(visited),
         "BestDepths": best_depths,
-        "BestRecipes": best_recipes
+        "NumRecipes": num_optimal_recipes
     }
     with open(persistent_temporary_file, "w", encoding="utf-8") as file:
         json.dump(last_state_json, file, ensure_ascii=False, indent=4)

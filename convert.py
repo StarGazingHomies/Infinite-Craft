@@ -490,12 +490,14 @@ def filter_results(result: str) -> bool:
 
 
 def generate_single_best_recipe(input_file: str, output_file: str):
+    print("Loading file...")
     try:
         with open(input_file, "r", encoding="utf-8") as file:
             last_state_json = json.load(file)
         best_recipes = last_state_json["BestRecipes"]
     except FileNotFoundError:
         best_recipes = {}
+    print("File loading complete!")
 
     MAX_DEPTH = 16
     recipe_list = [[] for _ in range(MAX_DEPTH + 1)]
@@ -521,7 +523,7 @@ def generate_single_best_recipe(input_file: str, output_file: str):
                 # if key.lower() in visited:
                 #     continue
                 # visited.add(key.lower())
-                value_str = "\n".join([f"{x[0]} + {x[1]} -> {x[2]}" for x in value])
+                value_str = "\n".join([f"{x[0]} + {x[1]} = {x[2]}" for x in value])
                 f.write(f"{count+1}: {key}:\n{value_str}\n\n")
                 count += 1
     # with open(output_file, "w", encoding="utf-8") as f:
@@ -862,7 +864,7 @@ if __name__ == '__main__':
     # if os.name == 'nt':
     #     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     # asyncio.run(main())
-    generate_single_best_recipe("persistent.json", "water.txt")
+    generate_single_best_recipe("cache/persistent_depth12_f.json", "depth12_f.txt")
     # compare_persistent_files("Depth 11/persistent_depth11_pass3.json", "Depth 11/persistent_depth11_pass2.json")
     # l = [10, 29, 113, 414, 1642, 7823, 39295, 209682]
     # print("\n".join([f"{l[i-1]}, {ordered_total(0, 0, i)}" for i in range(1, 9)]))

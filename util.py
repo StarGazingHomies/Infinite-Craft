@@ -2,7 +2,7 @@ import math
 
 WORD_TOKEN_LIMIT = 20
 WORD_COMBINE_CHAR_LIMIT = 30
-DEFAULT_STARTING_ITEMS = ("Wind", "Fire", "Water", "Earth")
+DEFAULT_STARTING_ITEMS = ("Water", "Fire", "Wind", "Earth")
 
 
 def pair_to_int(i: int, j: int) -> int:
