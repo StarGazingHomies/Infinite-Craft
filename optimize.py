@@ -23,11 +23,17 @@ from optimizers.optimizer_interface import OptimizerRecipeList, optimizer_recipe
 
 async def request_extra_generation(session: aiohttp.ClientSession, rh: recipe.RecipeHandler, current: list[str]):
     new_items = set()
+
+    tasks = []
     for item1 in current:
         for item2 in current:
-            new_item = await rh.combine(session, item1, item2)
-            if new_item and new_item != "Nothing" and new_item not in current:
-                new_items.add(new_item)
+            tasks.append(rh.combine(session, item1, item2))
+
+    results = await asyncio.gather(*tasks)
+    for new_item in results:
+        if new_item and new_item != "Nothing" and new_item not in current:
+            new_items.add(new_item)
+
     return new_items
 
 
@@ -43,21 +49,33 @@ def get_local_generation(rh: recipe.RecipeHandler, current: list[str]):
 
 async def get_all_recipes(session: aiohttp.ClientSession, rh: recipe.RecipeHandler, items: list[str]):
     total_recipe_count = len(items) * (len(items) + 1) // 2
-    current_recipe = 0
+    completed_count = 0
+
+    # Request wrapper
+    async def combine_wrapper(item1, item2):
+        nonlocal completed_count
+        result = await rh.combine(session, item1, item2)
+        completed_count += 1
+        cur_precentage = int(completed_count / total_recipe_count * 100)
+        last_precentage = int((completed_count - 1) / total_recipe_count * 100)
+        if cur_precentage != last_precentage:
+            print(f"Recipe Progress: {cur_precentage}% ({completed_count}/{total_recipe_count})")
+        return item1, item2, result
+
     # Only store valid recipes
     recipes = []
     items_set = set([item.lower() for item in items])
+    tasks = []
     for u, item1 in enumerate(items):
         for item2 in items[u:]:
-            new_item = await rh.combine(session, item1, item2)
-            if new_item.lower() in items_set:
-                recipes.append((item1, item2, new_item))
-            current_recipe += 1
+            tasks.append(combine_wrapper(item1, item2))
 
-            cur_precentage = int(current_recipe / total_recipe_count * 100)
-            last_precentage = int((current_recipe - 1) / total_recipe_count * 100)
-            if cur_precentage != last_precentage:
-                print(f"Recipe Progress: {cur_precentage}% ({current_recipe}/{total_recipe_count})")
+    results = await asyncio.gather(*tasks)
+
+    for item1, item2, new_item in results:
+        if new_item.lower() in items_set:
+            recipes.append((item1, item2, new_item))
+
     return recipes
 
 
@@ -109,7 +127,6 @@ async def initialize_optimizer(
 
 async def main(*,
                file: str = "speedrun.txt",
-               ignore_case: bool = False,
                extra_generations: int = 1,
                local_generations: int = 0,
                deviation: int = -1,
@@ -119,10 +136,10 @@ async def main(*,
     start_time = time.perf_counter()
 
     # Parse crafts file
-    crafts = speedrun.parse_craft_file(file, ignore_case=ignore_case)
+    crafts = speedrun.parse_craft_file(file)
     craft_results = [craft[2] for craft in crafts]
     if target is None:
-        target = [craft_results[-1], ]
+        target = crafts.targetList
     max_crafts = len(crafts)
     final_items_for_current_recipe = list(util.DEFAULT_STARTING_ITEMS) + craft_results
 
@@ -146,13 +163,13 @@ async def main(*,
     initial_crafts = [optimizer_recipes.get_id(item) for item in list(util.DEFAULT_STARTING_ITEMS) + craft_results]
 
     # Artificial targets, when args just don't cut it because there's too many
-    alphabets = [chr(i) for i in range(ord('a'), ord('z') + 1)]
-    target = []
-    for c in alphabets:
-        target.append(c)
-        target.append(f".{c}")
-        target.append(f"\"{c}\"")
-    print(target)
+    # alphabets = [chr(i) for i in range(ord('a'), ord('z') + 1)]
+    # target = []
+    # for c in alphabets:
+    #     target.append(c)
+    #     target.append(f".{c}")
+    #     target.append(f"\"{c}\"")
+    # print(target)
 
     # gen_1_pokemon = ['Lapras', 'Squirtle', 'Charizard', 'Magikarp', 'Magmar', 'Pikachu', 'Pidgey', 'Pidgeotto', 'Pidgeot', 'Gyarados', 'Raichu', 'Kingler', 'Blastoise', 'Charmander', 'Charmeleon', 'Bulbasaur', 'Ivysaur', 'Venusaur', 'Geodude', 'Graveler', 'Golem', 'Dragonite', 'Dragonair', 'Seadra', 'Omastar', 'Omanyte', 'Arcanine', 'Flareon', 'Vaporeon', 'Jolteon', 'Eevee', 'Aerodactyl', 'Moltres', 'Zapdos', 'Articuno', 'Cubone', 'Marowak', 'Oddish', 'Gloom', 'Vileplume', 'Jigglypuff', 'Wigglytuff', 'Grimer', 'Muk', 'Koffing', 'Weezing', 'Golduck', 'Psyduck', 'Weedle', 'Kakuna', 'Beedrill', 'Caterpie', 'Butterfree', 'Mewtwo', 'Mew', 'Hitmonlee', 'Hitmonchan', 'Meowth', 'Persian', 'Slowbro', 'Spearow', 'Fearow', 'Zubat', 'Golbat', 'Seaking', 'Goldeen', 'Sandshrew', 'Sandslash', 'Vulpix', 'Ninetales', 'Growlithe', 'Chansey', 'Snorlax', "Farfetch’d", 'Shellder', 'Cloyster', 'Mr. Mime', 'Arbok', 'Scyther', 'Onix', 'Ditto', 'Metapod', 'Dodrio', 'Doduo', 'Kangaskhan', 'Jynx', 'Ekans', 'Wartortle', 'Drowzee', 'Hypno', 'Poliwrath', 'Poliwhirl', 'Poliwag', 'Krabby', 'Nidoking', 'Weepinbell', 'Victreebel', 'Bellsprout', 'Raticate', 'Rattata', 'Porygon', 'Tauros', 'Slowpoke', 'Horsea', 'Nidoran', 'Nidorina', 'Nidoqueen', 'Nidorino', 'Magneton', 'Magnemite', 'Starmie', 'Staryu', 'Lickitung', 'Exeggcute', 'Exeggutor', 'Abra', 'Kadabra', 'Alakazam', 'Tentacruel', 'Tentacool', 'Pinsir', 'Clefairy', 'Clefable', 'Paras', 'Parasect', 'Gastly', 'Haunter', 'Gengar', 'Ponyta', 'Rapidash', 'Rhyhorn', 'Rhydon', 'Seel', 'Dewgong', 'Venomoth', 'Venonat', 'Diglett', 'Dugtrio', 'Electrode', 'Voltorb', 'Kabutops', 'Kabuto', 'Tangela', 'Dratini', 'Primeape', 'Machamp', 'Machoke', 'Machop', 'Mankey', 'Electabuzz', 'Missingno']
     # target = gen_1_pokemon
@@ -162,18 +179,7 @@ async def main(*,
 
     # Run the optimizer
     print(f"Optimizing for {target}...")
-    a_star.optimize(target, optimizer_recipes, max_crafts, initial_crafts, deviation)
-
-    # optimization_args = {
-    #     "targets": target,
-    #     "upper_bound": max_crafts,
-    #     "deviation": deviation,
-    #     "initial_crafts": initial_crafts,
-    #     "recipes": optimizer_recipes_to_savefile(optimizer_recipes)
-    # }
-    #
-    # with open("a_star_benchmark_infinite_craft_D21.json", "w") as f:
-    #     json.dump(optimization_args, f, indent=4)
+    result = a_star.optimize(target, optimizer_recipes, max_crafts, initial_crafts, deviation)
 
     # End timer
     end_time = time.perf_counter()
@@ -225,7 +231,6 @@ if __name__ == '__main__':
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     asyncio.run(main(
         file=args.filename,
-        ignore_case=args.ignore_case,
         extra_generations=args.extra_generations,
         local_generations=args.local_generations,
         deviation=args.deviation,

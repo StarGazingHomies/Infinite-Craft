@@ -86,8 +86,8 @@ class SpeedrunRecipe:
 
     def to_discord_asciidoc(self) -> str:
         current_str = "```asciidoc\n"
-        for craft in self.crafts:
-            current_str += f"{craft[0]}  +  {craft[1]}  =  {craft[2]}{'  // @result :: ' if craft[3] else ''}\n"
+        for i, craft in enumerate(self.crafts):
+            current_str += f"{craft[0]}  +  {craft[1]}  =  {craft[2]}{'  // ' + str(i+1) + ' :: ' if craft[3] else ''}\n"
         current_str += "```"
         return current_str
 
@@ -114,14 +114,15 @@ def parse_craft_file(filename: str) -> SpeedrunRecipe:
                 comment = comment.group(0)
             if not line.strip():
                 continue
-            # Target element indicated by @result within a comment
-            target = "@result" in comment if comment else False
+            # Target element indicated by two colons (::) within a comment
+            target = "::" in comment if comment else False
             target_count += target
 
             # Warning if you're using single spaced comments
             if not comment_warning and "//" in line:
                 comment_warning = True
-                print(f"Warning: Double slashes found in line {i+1}: {line}. If this is a comment, use double spaces instead.")
+                print(f"Warning: Double slashes found in line {i+1}: {line}. "
+                      f"If this is a comment, use double spaces instead.")
 
             line = line.strip()
             ingredients, result = line.split('  =  ')

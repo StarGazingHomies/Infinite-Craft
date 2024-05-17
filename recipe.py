@@ -10,6 +10,7 @@ from typing import Optional
 from urllib.parse import quote_plus
 
 import aiohttp
+import asyncio
 from bidict import bidict
 import sqlite3
 
@@ -57,6 +58,7 @@ class RecipeHandler:
 
     last_request: float = 0
     request_cooldown: float = 0.5                # 0.5s is safe for this API
+    request_lock: asyncio.Lock = asyncio.Lock()
     sleep_time: float = 1.0
     sleep_default: float = 1.0
     retry_exponent: float = 2.0
@@ -311,8 +313,7 @@ class RecipeHandler:
                nothing_count < self.nothing_verification):  # We haven't verified "Nothing" enough times
             # Request again to verify, just in case...
             # Increases time taken on requests but should be worth it.
-            # Also note that this can't be asynchronous due to all the optimizations I made assuming a search order
-            time.sleep(self.nothing_cooldown)
+            await asyncio.sleep(self.nothing_cooldown)
             if self.print_new_recipes:
                 print("Re-requesting Nothing result...", flush=True)
 
@@ -331,6 +332,10 @@ class RecipeHandler:
         b_req = quote_plus(b)
 
         # Don't request too quickly. Have been 429'd way too many times
+        async with self.request_lock:
+            return await self._request_pair(session, a, b, a_req, b_req)
+
+    async def _request_pair(self, session: aiohttp.ClientSession, a: str, b: str, a_req: str, b_req: str) -> dict:
         t = time.perf_counter()
         if (t - self.last_request) < self.request_cooldown:
             time.sleep(self.request_cooldown - (t - self.last_request))
@@ -379,83 +384,9 @@ async def random_walk(rh: RecipeHandler, session: aiohttp.ClientSession, steps: 
 
 async def main():
     pass
-    # letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J",
-    #            "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T",
-    #            "U", "V", "W", "X", "Y", "Z"]
-    #
-    # letters2 = []
-    # for l1 in letters:
-    #     for l2 in letters:
-    #         letters2.append(l1 + l2)
-    #
-    rh = RecipeHandler([])
-    for combo in rh.get_crafts("Twitter"):
-        print(f"{combo[0]} + {combo[1]} -> Twitter")
-    # headers = load_json("headers.json")["default"]
-    # async with aiohttp.ClientSession() as session:
-    #     async with session.get("https://neal.fun/infinite-craft/", headers=headers) as resp:
-    #         pass
-    #     # await random_walk(rh, session, 5000)
-    #     await rh.combine(session, "Ash", "Steam Zeus")
-    # print(rh.get_crafts("20"))
-    # print(f"Ash + Steam Zeus = {rh.get_local('Ash', 'Steam Zeus')}")
-
-    # letter_recipes = {}
-    # for two_letter_combo in letters2:
-    #     uses = r.get_uses(two_letter_combo)
-    #     print(two_letter_combo, uses)
-    #     letter_recipes[two_letter_combo] = uses
-    #
-    # with open("letter_recipes.json", "w", encoding='utf-8') as f:
-    #     json.dump(letter_recipes, f, ensure_ascii=False, indent=4)
-    # target_words = ['Negative', 'Positive', '1']
-    # with open("letter_recipes.json", "r", encoding='utf-8') as f:
-    #     letter_recipes = json.load(f)
-    #
-    # new_letter_recipes = {}
-    # for l, recipes in letter_recipes.items():
-    #     r_set = set()
-    #     for a, b in recipes:
-    #         r_set.add((a, b))
-    #     new_letter_recipes[l] = r_set
-    #
-    # new_2_letters = []
-    # for l, recipes in new_letter_recipes.items():
-    #     if len(recipes) == 0:
-    #         print(l)
-    #         break
-    #     nothing_count = 0
-    #     nothing_recipes = []
-    #     valid_recipes = set()
-    #     for second, result in recipes:
-    #         if result == "Nothing" or result == "Nothing\t":
-    #             nothing_count += 1
-    #             nothing_recipes.append(second)
-    #             # print(f"{l} + {second} -> {result}")
-    #         else:
-    #             u, v = l, second
-    #             if u > v:
-    #                 u, v = v, u
-    #             valid_recipes.add((u, v, result))
-    #     nothing_recipes.sort()
-    #     nothing_ratio = nothing_count / len(recipes)
-    #     new_2_letters.append((nothing_ratio, nothing_count, len(recipes), l, valid_recipes, nothing_recipes))
-    #     if l == "HX":
-    #         earliest_recipe = ""
-    #         for u, v, r in valid_recipes:
-    #             other = u if u != "HX" else v
-    #             print(other)
-    #             if earliest_recipe == "" or earliest_recipe > other:
-    #                 print(f"New earliest: {other}")
-    #                 earliest_recipe = other
-    #         print(earliest_recipe)
-    # new_2_letters.sort(reverse=True)
-    # print("\n".join([f"{l}: {n}/{t} ({r:.2f}) - Valid: {vs if len(vs) > 0 else "None"}" for r, n, t, l, vs, ns in new_2_letters[:30]]))
 
 
 if __name__ == "__main__":
-    import asyncio
-
     if os.name == 'nt':
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     asyncio.run(main())

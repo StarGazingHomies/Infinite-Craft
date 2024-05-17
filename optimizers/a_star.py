@@ -13,6 +13,8 @@ from optimizers.optimizer_interface import OptimizerRecipeList, savefile_to_opti
 from recipe import RecipeHandler
 import heapq
 
+from speedrun import SpeedrunRecipe
+
 
 class AStarOptimizerState:
     craft_count: int
@@ -144,7 +146,7 @@ def optimize(
         max_deviations: int = 128,
         *,
         print_status: bool = True,
-        self_generate_heuristic: bool = False) -> list[AStarOptimizerState]:
+        self_generate_heuristic: bool = False) -> list[SpeedrunRecipe]:
     # Parsing args
     check_deviations = False
     if initial_crafts and max_deviations >= 0:
@@ -274,28 +276,39 @@ def optimize(
         print(f"Complete! {completed_steps} crafts")
         print(f"Found {len(final_states)} optimal recipes.")
 
-        # Post-processing - make sure the ordering is correct
-        for final_state in final_states:
-            crafted = {0, 1, 2, 3}
-            steps_copy = final_state.trace.copy()
-            new_steps = []
-            while len(steps_copy) > 0:
-                for u, v, result in steps_copy:
-                    # print(u, v, result, u in crafted, v in crafted, result in crafted)
-                    if u in crafted and v in crafted:
-                        crafted.add(result)
-                        # print("Crafted", recipe_list.get_name_capitalized(result))
-                        steps_copy.remove((u, v, result))
-                        new_steps.append((u, v, result))
+    speedrun_recipes: list[SpeedrunRecipe] = []
+    # Post-processing - make sure the ordering is correct
+    for final_state in final_states:
+        crafted = {0, 1, 2, 3}
+        steps_copy = final_state.trace.copy()
+        new_steps = []
+        while len(steps_copy) > 0:
+            for u, v, result in steps_copy:
+                # print(u, v, result, u in crafted, v in crafted, result in crafted)
+                if u in crafted and v in crafted:
+                    crafted.add(result)
+                    # print("Crafted", recipe_list.get_name_capitalized(result))
+                    steps_copy.remove((u, v, result))
+                    new_steps.append((u, v, result))
 
-            for u, v, result in new_steps:
-                print(
-                    f"{recipe_list.get_name_capitalized(u)} + {recipe_list.get_name_capitalized(v)} = {recipe_list.get_name_capitalized(result)}")
+        cur_speedrun = []
+        for u, v, result in new_steps:
+            ing1 = recipe_list.get_name_capitalized(u)
+            ing2 = recipe_list.get_name_capitalized(v)
+            res = recipe_list.get_name_capitalized(result)
+            is_target = result in target_ids
+            cur_speedrun.append((ing1, ing2, res, is_target))
+
+        cur_speedrun_recipe = SpeedrunRecipe(cur_speedrun)
+        speedrun_recipes.append(cur_speedrun_recipe)
+        if print_status:
+            print(cur_speedrun_recipe.to_discord_asciidoc())
             print("\n---------------------------------------------------\n")
 
+    if print_status:
         print("Optimization complete!")
 
-    return final_states
+    return speedrun_recipes
 
 
 def main():
