@@ -496,7 +496,11 @@ def generate_single_best_recipe(input_file: str, output_file: str):
             last_state_json = json.load(file)
         best_recipes = last_state_json["BestRecipes"]
     except FileNotFoundError:
-        best_recipes = {}
+        print("File not found")
+        return
+    except KeyError:
+        print("Invalid file")
+        return
     print("File loading complete!")
 
     MAX_DEPTH = 16
@@ -524,7 +528,7 @@ def generate_single_best_recipe(input_file: str, output_file: str):
                 #     continue
                 # visited.add(key.lower())
                 value_str = "\n".join([f"{x[0]} + {x[1]} = {x[2]}" for x in value])
-                f.write(f"{count+1}: {key}:\n{value_str}\n\n")
+                f.write(f"{count + 1}: {key}:\n{value_str}\n\n")
                 count += 1
     # with open(output_file, "w", encoding="utf-8") as f:
     #     for i in range(10):
@@ -535,6 +539,35 @@ def generate_single_best_recipe(input_file: str, output_file: str):
     #             #     continue
     #             # visited.add(key.lower())
     #             f.write(f"{key}\n")
+
+
+def export_items(input_file: str, output_file: str):
+    print("Loading file...")
+    try:
+        with open(input_file, "r", encoding="utf-8") as file:
+            last_state_json = json.load(file)
+        best_recipes = last_state_json["BestRecipes"]
+    except FileNotFoundError:
+        print("File not found")
+        return
+    except KeyError:
+        print("Invalid file")
+        return
+
+    MAX_DEPTH = 12
+    items_list = [[] for _ in range(MAX_DEPTH + 1)]
+    for key, value in best_recipes.items():
+        if len(value[0]) > MAX_DEPTH:
+            break
+        if filter_results(key):
+            items_list[len(value[0])].append(key)
+
+    print("Items at each depth: ", [len(x) for x in items_list])
+
+    with open(output_file, "w", encoding="utf-8") as f:
+        for i in range(MAX_DEPTH + 1):
+            for key in items_list[i]:
+                f.write(f"{i}={key}=\n")
 
 
 def compare_persistent_files(file1: str, file2: str):
@@ -775,7 +808,7 @@ def analyze_minus_claus(file: str, persistent_file: str):
         if len(key) > util.WORD_COMBINE_CHAR_LIMIT:
             continue
         items.append((key, value[0], value[1]))
-    items.sort(key=lambda x: x[1]/x[2], reverse=True)
+    items.sort(key=lambda x: x[1] / x[2], reverse=True)
     for item in items:
         if item[1] <= item[2] * 0.99:
             break
@@ -795,7 +828,7 @@ def analyze_minus_claus(file: str, persistent_file: str):
                     is_valid = False
                     break
         if not is_valid and item[0] in items_in_depth_11:
-        # if item[0] in items_in_depth_11:
+            # if item[0] in items_in_depth_11:
             print(f"{item[0]}: {item[1]} / {item[2]} ( {item[1] / item[2]} )")
 
 
@@ -843,7 +876,7 @@ def binary_to_eeeing(data: str):
     for char in data:
         num = ord(char)
         for i in range(8):
-            if num & (1<<(7-i)):
+            if num & (1 << (7 - i)):
                 print("E", end="")
             else:
                 print("e", end="")
@@ -852,8 +885,47 @@ def binary_to_eeeing(data: str):
     print()
 
 
+def analyze_tokens(file: str):
+    with open(file, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    tokenizer = util.Tokenizer()
+    items = [line.split('=')[:2] for line in lines]
+    tokens_at_depth = [[0 for _ in range(21)] for _ in range(13)]
+    for depth, item in items:
+        tokens = tokenizer.tokenize(item)
+        tokens_at_depth[int(depth)][len(tokens)-1] += 1
+        # print(f"{depth} -> {len(tokens)} {item}")
+
+    for i in range(13):
+        print(f"Depth {i}: {sum(tokens_at_depth[i])}")
+        print(tokens_at_depth[i])
+
+
+def analyze_tokens2():
+    tokens_at_depth = [
+        [0, 3, 6, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 9, 5, 4, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 19, 24, 4, 3, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 15, 61, 45, 6, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 35, 114, 85, 36, 4, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 70, 261, 168, 88, 31, 6, 3, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 132, 488, 506, 277, 103, 40, 14, 3, 1, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 178, 944, 1256, 861, 392, 159, 64, 16, 10, 4, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0],
+        [0, 257, 1883, 3011, 2740, 1534, 620, 285, 101, 44, 17, 12, 6, 2, 2, 1, 0, 0, 0, 0, 2],
+        [0, 301, 3484, 8350, 8899, 5808, 2783, 1228, 498, 239, 107, 51, 36, 8, 5, 3, 0, 0, 1, 2, 16],
+        [0, 350, 7259, 23013, 29791, 22216, 12591, 5963, 2762, 1283, 575, 314, 167, 90, 49, 40, 16, 13, 19, 8, 59],
+        [0, 200, 8298, 32391, 49590, 41253, 25765, 13632, 6687, 3208, 1711, 863, 481, 242, 153, 68, 45, 30, 24, 10, 139],]
+
+    for i in range(12):
+        average_tokens = sum([j * tokens_at_depth[i][j] for j in range(21)]) / sum(tokens_at_depth[i])
+        print(f"Depth {i+1}: {sum(tokens_at_depth[i])} {average_tokens}")
+
+
 if __name__ == '__main__':
     pass
+    # analyze_tokens("depth12_h_results.txt")
+    analyze_tokens2()
     # analyze_minus_claus("Searches/Minus Claus/minus_claus_data2.json",
     #                     "Depth 11/persistent_depth11_pass3.json")
     # merge_sql("Depth 11/recipes_depth11_pass3.db")
@@ -864,7 +936,8 @@ if __name__ == '__main__':
     # if os.name == 'nt':
     #     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     # asyncio.run(main())
-    generate_single_best_recipe("cache/persistent_depth12_f.json", "depth12_f.txt")
+    # export_items("Depth 12/persistent_depth12_h.json", "depth12_h_results.txt")
+    # generate_single_best_recipe("Depth 12/persistent_depth12_h.json", "Depth 12/depth12_h_single_best.txt")
     # compare_persistent_files("Depth 11/persistent_depth11_pass3.json", "Depth 11/persistent_depth11_pass2.json")
     # l = [10, 29, 113, 414, 1642, 7823, 39295, 209682]
     # print("\n".join([f"{l[i-1]}, {ordered_total(0, 0, i)}" for i in range(1, 9)]))
