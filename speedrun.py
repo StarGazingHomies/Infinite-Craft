@@ -299,7 +299,7 @@ async def dynamic_check_script(speedrun_recipe: SpeedrunRecipe) -> bool:
         async with session.get("https://neal.fun/infinite-craft/", headers=headers) as resp:
             pass
         for i, craft in enumerate(crafts):
-            ing1, ing2, result = craft
+            ing1, ing2, result, is_target = craft
             true_result = await recipe_handler.combine(session, ing1.strip(), ing2.strip())
 
             if true_result != result.strip():

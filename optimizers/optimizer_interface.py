@@ -58,7 +58,7 @@ class OptimizerRecipeList:
         #     return self.ids[item.lower()]
 
         new_id = len(self.ids)
-        print(new_id)
+        # print(new_id)
         self.ids[item.lower()] = new_id
         self.id_capitalized[new_id] = item
         return new_id
