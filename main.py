@@ -58,13 +58,15 @@ best_depths: dict[str, int] = dict()
 num_optimal_recipes: dict[str, int] = dict()
 persistent_file: str = "persistent.json"
 persistent_temporary_file: str = "persistent2.json"
+result_directory: str = "Results"
 
 recipe_handler: Optional[recipe.RecipeHandler] = recipe.RecipeHandler(init_state)
-depth_limit = 18
+depth_limit = 9
 extra_depth = 0
 case_sensitive = True
-allow_starting_elements = False
+allow_starting_elements = True
 resume_last_run = True
+write_to_file = True
 
 last_game_state: Optional['GameState'] = None
 new_last_game_state: Optional['GameState'] = None
@@ -96,7 +98,7 @@ class GameState:
             left, right = int_to_pair(self.state[i])
             if (left < 0) or (right < 0):
                 continue
-            steps.append(f"{self.items[left]} + {self.items[right]} -> {self.items[i]}")
+            steps.append(f"{self.items[left]} + {self.items[right]} = {self.items[i]}")
         return "\n".join(steps)
 
     def __len__(self):
@@ -179,6 +181,17 @@ class GameState:
         return self.state[-1]
 
 
+def append_to_file(state: GameState):
+    # print(len(visited))
+    # Make state.tail_item() safe as a filename
+    tail_item = state.tail_item()
+    tail_item = "".join(i if i not in "\\/:*?<>|" else "_" for i in tail_item)
+    file = os.path.join(result_directory, f"{len(state) - len(init_state)}", f"{tail_item}.txt")
+    os.makedirs(os.path.dirname(file), exist_ok=True)
+    with open(file, "a", encoding="utf-8") as f:
+        f.write(f"{state}\n\n")
+
+
 def process_node(state: GameState):
     global autosave_counter
 
@@ -192,19 +205,17 @@ def process_node(state: GameState):
         if autosave_counter >= autosave_interval:
             autosave_counter = 0
             save_last_state()
-        # Still write to best_recipes.txt file?
-        # with open(best_recipes_file, "a", encoding="utf-8") as file:
-        #     file.write(f"{len(visited)}: {state}\n\n")
 
     # Multiple recipes for the same item at same depth
     depth = len(state) - len(init_state)
     if state.tail_item() not in best_depths:
         best_depths[state.tail_item()] = depth
-        # TODO: Write to specific file
-        # best_recipes[state.tail_item()] = [state.to_list(), ]
+        if write_to_file:
+            append_to_file(state)
     elif depth <= best_depths[state.tail_item()] + extra_depth:
+        if write_to_file:
+            append_to_file(state)
         pass
-        # best_recipes[state.tail_item()].append(state.to_list())
 
 
 # Depth limited search
@@ -240,6 +251,7 @@ async def dls(session: aiohttp.ClientSession, state: GameState, depth: int) -> i
     if len(unused_items) > depth + 1:  # Impossible to use all elements, since we have too few crafts left
         return 0
     elif len(unused_items) > depth:  # We must start using unused elements NOW.
+        # TODO: 1st unused item must be used in this step, because of ordering
         for j in range(len(unused_items)):  # For loop ordering is important. We want increasing pair_to_int order.
             for i in range(j):  # i != j. We have to use two for unused_items to decrease.
                 child = await state.child(session, pair_to_int(unused_items[i], unused_items[j]))

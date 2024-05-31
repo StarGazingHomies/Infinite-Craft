@@ -25,8 +25,8 @@ async def request_extra_generation(session: aiohttp.ClientSession, rh: recipe.Re
     new_items = set()
 
     tasks = []
-    for item1 in current:
-        for item2 in current:
+    for i, item1 in enumerate(current):
+        for item2 in current[i:]:
             tasks.append(rh.combine(session, item1, item2))
 
     results = await asyncio.gather(*tasks)

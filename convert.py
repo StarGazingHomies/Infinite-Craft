@@ -745,6 +745,73 @@ def merge_savefile(file1: str, file2: str, output_file: str):
         json.dump(new_data, f, ensure_ascii=False)
 
 
+def find_softlocks():
+    rh = recipe.RecipeHandler([])
+    items_cur = rh.db.cursor()
+    items_cur.execute("SELECT * FROM items")
+    softlock_data = {}
+    for i in items_cur:
+        softlock_data[i[2]] = [0, 0]
+
+    recipes_cur = rh.db.cursor()
+    recipes_cur.execute("""
+    SELECT ing1.name, ing2.name, result.name
+    FROM recipes
+    JOIN items   AS ing1   ON ing1.id = recipes.ingredient1_id
+    JOIN items   AS ing2   ON ing2.id = recipes.ingredient2_id
+    JOIN items   AS result ON result.id = recipes.result_id
+    """)
+    # recipes = {}
+    recipes_count = 0
+    for r in recipes_cur:
+        recipes_count += 1
+        if recipes_count % 100000 == 0:
+            print(f"Processed {recipes_count} recipes")
+        if r[0] in softlock_data:
+            softlock_data[r[0]][1] += 1
+        else:
+            softlock_data[r[0]] = [0, 1]
+        if r[2].lower() == r[0].lower():
+            softlock_data[r[0]][0] += 1
+
+        if r[1] in softlock_data:
+            softlock_data[r[1]][1] += 1
+        else:
+            softlock_data[r[1]] = [0, 1]
+        if r[2].lower() == r[1].lower():
+            softlock_data[r[1]][0] += 1
+
+    # print(nothing_data)
+    with open("softlock_data.json", "w", encoding="utf-8") as f:
+        json.dump(softlock_data, f, ensure_ascii=False)
+
+
+def analyze_softlocks(file: str, persistent_file: str, *, softlock_limit = 0.95):
+    with open(file, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    with open(persistent_file, "r", encoding="utf-8") as f:
+        persistent_data = json.load(f)
+    items_in_depth_11 = persistent_data["Visited"]
+    print(len(items_in_depth_11))
+
+    items: list[tuple[str, int, int]] = []
+    for key, value in data.items():
+        if value[1] <= 50:
+            continue
+        if len(key) > util.WORD_COMBINE_CHAR_LIMIT:
+            continue
+        items.append((key, value[0], value[1]))
+    items.sort(key=lambda x: x[1] / x[2], reverse=True)
+    for item in items:
+        if item[1] <= item[2] * softlock_limit:
+            break
+
+        if item[0] in items_in_depth_11:
+            # if item[0] in items_in_depth_11:
+            print(f"{item[0]}: {item[1]} / {item[2]} ( {round(item[1] / item[2]*100):.1f}% )")
+
+
 def find_minus_claus():
     rh = recipe.RecipeHandler([])
     items_cur = rh.db.cursor()
@@ -885,6 +952,40 @@ def binary_to_eeeing(data: str):
     print()
 
 
+def analyze_capitalization(file: str):
+    with open(file, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    items = [line.split('=')[:2] for line in lines]
+    for depth, item in items:
+        if util.to_start_case(item) != item:
+            print(f"{depth} = {item}")
+
+
+def count_FDs(file: str):
+    with open(file, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    rh = recipe.RecipeHandler([], db_location="Depth 12/recipes_depth12_h.db")
+
+    depth_count = [0 for _ in range(13)]
+    fd_count = [0 for _ in range(13)]
+    for line in lines:
+        depth = line.split('=')[0]
+        word = line.split('=')[1].strip()
+        result = rh.get_item(word)
+        if not result:
+            print(f"Could not find {word}")
+            continue
+        depth_count[int(depth)] += 1
+        if result[1] == 1:
+            fd_count[int(depth)] += 1
+            print(f"{depth} = {word} = {result}")
+
+    print(depth_count)
+    print(fd_count)
+
+
 def analyze_tokens(file: str):
     with open(file, "r", encoding="utf-8") as f:
         lines = f.readlines()
@@ -924,8 +1025,12 @@ def analyze_tokens2():
 
 if __name__ == '__main__':
     pass
+    # find_softlocks()
+    analyze_softlocks("softlock_data.json", "Depth 11/persistent_depth11_pass3.json", softlock_limit=0.5)
+    # count_FDs("Depth 12/depth12_h_results.txt")
+    # analyze_capitalization("Depth 12/depth12_h_results.txt")
     # analyze_tokens("depth12_h_results.txt")
-    analyze_tokens2()
+    # analyze_tokens2()
     # analyze_minus_claus("Searches/Minus Claus/minus_claus_data2.json",
     #                     "Depth 11/persistent_depth11_pass3.json")
     # merge_sql("Depth 11/recipes_depth11_pass3.db")

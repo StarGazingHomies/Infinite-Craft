@@ -162,6 +162,11 @@ class RecipeHandler:
         except Exception as e:
             print(e)
 
+    def get_item(self, item: str) -> Optional[tuple[str, str]]:
+        cur = self.db.cursor()
+        cur.execute("SELECT emoji, first_discovery FROM items WHERE name = ?", (item,))
+        return cur.fetchone()
+
     def add_recipe(self, a: str, b: str, result: str):
         a = util.to_start_case(a)
         b = util.to_start_case(b)

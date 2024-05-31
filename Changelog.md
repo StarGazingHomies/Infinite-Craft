@@ -1,8 +1,6 @@
 # Changelog
 
 TODO:
-- Standardized Speedrun Lineages
-- Better configuration (CLI arguments)
 - Tokenizers & analysis (w/ transformers and a llama-like model, such as minillama)
 - Hybrid Step-Generation Preprocessing
 - N-Step-Lookahead Generational Algorithm?
@@ -13,7 +11,7 @@ Maybe even alpha-beta pruning (using heuristic)?
 - Crafting Tree Location File Generation?
 - OptimizerRecipeList and RecipeHandler common interface
 
-## Version 1.5.2 (in progress)
+## Version 1.5.2
 
 - Added `SpeedrunRecipe` to store speedrun recipes.
 - Speedruns now follow the following format:
@@ -25,8 +23,10 @@ Earth  +  Plant  =  Tree  // Note that there are doube spaces around + and =
 And multiline comments go like this
 */
 Water  +  Tree  /* Or even like this, but there must be two spaces! */  =  River
-Earth  +  Tree  =  Forest  // @result indicates that this is a result element
+Earth  +  Tree  =  Forest  // :: double colon indicates that this is a result element
 ```
+- Some token analysis in `convert.py`
+- `persistent.json` results split into a `Results/` directory
 
 ## Version 1.5.1
 
