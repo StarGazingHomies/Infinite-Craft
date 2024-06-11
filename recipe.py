@@ -360,6 +360,8 @@ class RecipeHandler:
                         print(f"Request failed with status {resp.status}", file=sys.stderr)
                         if resp.status == 500:
                             print(f"Internal Server Error when combining {a} + {b}", file=sys.stderr)
+                            with open("500s.txt", "a", encoding="utf-8") as fout:
+                                fout.write(f"{a} + {b} -> 500\n")
                             return {"result": "Nothing\t", "emoji": "", "isNew": False}
 
                         time.sleep(self.sleep_time)

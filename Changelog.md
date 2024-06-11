@@ -1,15 +1,19 @@
 # Changelog
 
 TODO:
-- Tokenizers & analysis (w/ transformers and a llama-like model, such as minillama)
 - Hybrid Step-Generation Preprocessing
 - N-Step-Lookahead Generational Algorithm?
 Maybe even alpha-beta pruning (using heuristic)?
 - In-place Procedural Removal
 - Visualization (trees!)
-- Split persistent.json into different files
 - Crafting Tree Location File Generation?
 - OptimizerRecipeList and RecipeHandler common interface
+
+## Version 1.5.3
+
+- (Temporary) optimal recipes in the Results folder.
+This will be changed into a proper database at *some* point, but it's
+mostly just to get the optimals out of memory and onto disk.
 
 ## Version 1.5.2
 

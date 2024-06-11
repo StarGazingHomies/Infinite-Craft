@@ -24,6 +24,19 @@ def int_to_pair(n: int) -> tuple[int, int]:
     return i, j
 
 
+def file_sanitize(s: str) -> str:
+    s = s.replace("%", "%%")
+    s = s.replace("\\", "%b")  # Backslash
+    s = s.replace("/", "%s")   # Slash
+    s = s.replace(":", "%c")   # Colon
+    s = s.replace("*", "%t")   # Star
+    s = s.replace("?", "%q")   # Question mark
+    s = s.replace("<", "%x")   # Opening angled brackets
+    s = s.replace(">", "%y")   # Closing angled brackets
+    s = s.replace("|", "%v")   # Vertical separator
+    return s
+
+
 def to_start_case(s: str) -> str:
     new_str = ""
     for i in range(len(s)):

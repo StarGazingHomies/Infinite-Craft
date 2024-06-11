@@ -12,7 +12,7 @@ import asyncio
 import aiohttp
 
 import recipe
-from util import int_to_pair, pair_to_int, DEFAULT_STARTING_ITEMS
+from util import int_to_pair, pair_to_int, DEFAULT_STARTING_ITEMS, file_sanitize
 
 init_state: tuple[str, ...] = DEFAULT_STARTING_ITEMS
 
@@ -47,7 +47,7 @@ for l1 in letters:
         letters2.append(l1 + l2)
 
 # init_state = tuple(list(init_state) + elements + ["Periodic Table",])
-# init_state = tuple(list(init_state) + letters + letters2)
+init_state = tuple(list(init_state) + letters + letters2)
 # init_state = tuple(list(init_state) + letters)
 # init_state = tuple(list(init_state) + speedrun_current_words)
 # init_state = ["Water"]
@@ -55,13 +55,12 @@ for l1 in letters:
 # best_recipes: dict[str, list[list[tuple[str, str, str]]]] = dict()
 visited = set()
 best_depths: dict[str, int] = dict()
-num_optimal_recipes: dict[str, int] = dict()
 persistent_file: str = "persistent.json"
 persistent_temporary_file: str = "persistent2.json"
 result_directory: str = "Results"
 
 recipe_handler: Optional[recipe.RecipeHandler] = recipe.RecipeHandler(init_state)
-depth_limit = 9
+depth_limit = 1
 extra_depth = 0
 case_sensitive = True
 allow_starting_elements = True
@@ -185,7 +184,7 @@ def append_to_file(state: GameState):
     # print(len(visited))
     # Make state.tail_item() safe as a filename
     tail_item = state.tail_item()
-    tail_item = "".join(i if i not in "\\/:*?<>|" else "_" for i in tail_item)
+    tail_item = file_sanitize(tail_item)
     file = os.path.join(result_directory, f"{len(state) - len(init_state)}", f"{tail_item}.txt")
     os.makedirs(os.path.dirname(file), exist_ok=True)
     with open(file, "a", encoding="utf-8") as f:
@@ -210,12 +209,11 @@ def process_node(state: GameState):
     depth = len(state) - len(init_state)
     if state.tail_item() not in best_depths:
         best_depths[state.tail_item()] = depth
-        if write_to_file:
-            append_to_file(state)
-    elif depth <= best_depths[state.tail_item()] + extra_depth:
-        if write_to_file:
-            append_to_file(state)
-        pass
+
+    if state.tail_item == "Fiji":
+        print("!")
+    if write_to_file and depth <= best_depths[state.tail_item()] + extra_depth:
+        append_to_file(state)
 
 
 # Depth limited search
@@ -320,7 +318,7 @@ async def main():
 
 
 def load_last_state():
-    global new_last_game_state, last_game_state, visited, best_depths, num_optimal_recipes
+    global new_last_game_state, last_game_state, visited, best_depths
     try:
         with open(persistent_file, "r", encoding="utf-8") as file:
             last_state_json = json.load(file)
@@ -332,7 +330,6 @@ def load_last_state():
         )
         new_last_game_state = last_game_state
         visited = set(last_state_json["BestDepths"].keys())
-        num_optimal_recipes = last_state_json["NumRecipes"]
         best_depths = last_state_json["BestDepths"]
     except FileNotFoundError:
         last_game_state = None
@@ -345,8 +342,7 @@ def save_last_state():
         return
     last_state_json = {
         "GameState": new_last_game_state.state,
-        "BestDepths": best_depths,
-        "NumRecipes": num_optimal_recipes
+        "BestDepths": best_depths
     }
     with open(persistent_temporary_file, "w", encoding="utf-8") as file:
         json.dump(last_state_json, file, ensure_ascii=False, indent=4)

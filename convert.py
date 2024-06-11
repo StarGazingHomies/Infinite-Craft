@@ -925,40 +925,14 @@ def make_ingredients_case_insensitive():
         rh.add_recipe(ing1, ing2, result)
 
 
-def eeeing_binary_to_text(data: str):
-    print()
-    print(data)
-    for char in data.split(" "):
-        bits = 0
-        for c in char:
-            if c == "E":
-                bits = (bits << 1) | 1
-            elif c == "e":
-                bits = (bits << 1)
-        print(chr(bits), end="")
-    print()
-
-
-def binary_to_eeeing(data: str):
-    for char in data:
-        num = ord(char)
-        for i in range(8):
-            if num & (1 << (7 - i)):
-                print("E", end="")
-            else:
-                print("e", end="")
-            # num >>= 1
-        print(" ", end="")
-    print()
-
-
-def analyze_capitalization(file: str):
+def analyze_tmp(file: str):
     with open(file, "r", encoding="utf-8") as f:
         lines = f.readlines()
 
     items = [line.split('=')[:2] for line in lines]
+    item: str
     for depth, item in items:
-        if util.to_start_case(item) != item:
+        if item.isnumeric():
             print(f"{depth} = {item}")
 
 
@@ -1023,20 +997,36 @@ def analyze_tokens2():
         print(f"Depth {i+1}: {sum(tokens_at_depth[i])} {average_tokens}")
 
 
+def analyze_folder_save(persistent_file: str, results_folder: str = "Results", output_file: str = "4_letter_sequences.txt"):
+    with open(persistent_file, "r", encoding="utf-8") as f:
+        persistent_data = json.load(f)
+    items: dict[str, int] = persistent_data["BestDepths"]
+    path = os.path.join(os.getcwd(), results_folder)
+    # print(path)
+    count = 0
+    final_result = ""
+    for item, depth in items.items():
+        item_recipe_file = os.path.join(path, f"{depth}", f"{util.file_sanitize(item)}.txt")
+        # print(item_recipe_file)
+        if len(item) != 4 or not all([ord('a') <= ord(x) <= ord('z') for x in item.lower()]):
+            continue
+        count += 1
+        with open(item_recipe_file, "r", encoding='utf-8') as f:
+            final_result += f"{count}: " + f.read()
+
+    with open(output_file, "w") as fout:
+        fout.write(final_result)
+
+
 if __name__ == '__main__':
     pass
-    # find_softlocks()
-    analyze_softlocks("softlock_data.json", "Depth 11/persistent_depth11_pass3.json", softlock_limit=0.5)
-    # count_FDs("Depth 12/depth12_h_results.txt")
-    # analyze_capitalization("Depth 12/depth12_h_results.txt")
+    analyze_folder_save("persistent.json")
     # analyze_tokens("depth12_h_results.txt")
     # analyze_tokens2()
     # analyze_minus_claus("Searches/Minus Claus/minus_claus_data2.json",
     #                     "Depth 11/persistent_depth11_pass3.json")
     # merge_sql("Depth 11/recipes_depth11_pass3.db")
     # input()
-    # eeeing_binary_to_text(input())    # binary_to_eeeing("Yes, I most certainly have decoded the message. How have you been rom?")
-    # binary_to_eeeing("Nini rom, may Luna bless your dreams tonight")
     # make_ingredients_case_insensitive()
     # if os.name == 'nt':
     #     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
