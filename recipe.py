@@ -82,7 +82,8 @@ class RecipeHandler:
         # Load headers
         self.headers = load_json("headers.json")["api"]
 
-        self.db = sqlite3.connect(self.db_location)
+        self.db = sqlite3.connect(self.db_location, isolation_level=None)
+        self.db.execute('pragma journal_mode=wal')
         atexit.register(lambda: (self.close()))
         # Items table
         self.db.execute("""
