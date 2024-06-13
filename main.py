@@ -11,6 +11,7 @@ import json
 import asyncio
 import aiohttp
 
+import optimals
 import recipe
 from util import int_to_pair, pair_to_int, DEFAULT_STARTING_ITEMS, file_sanitize
 
@@ -46,8 +47,15 @@ for l1 in letters:
     for l2 in letters:
         letters2.append(l1 + l2)
 
+letters3 = []
+for l1 in letters:
+    for l2 in letters:
+        for l3 in letters:
+            letters3.append(l1 + l2 + l3)
+
 # init_state = tuple(list(init_state) + elements + ["Periodic Table",])
-init_state = tuple(list(init_state) + letters + letters2)
+# init_state = tuple(list(init_state) + letters + letters2)
+init_state = tuple(list(init_state) + letters + letters2 + letters3)
 # init_state = tuple(list(init_state) + letters)
 # init_state = tuple(list(init_state) + speedrun_current_words)
 # init_state = ["Water"]
@@ -60,11 +68,12 @@ persistent_temporary_file: str = "persistent2.json"
 result_directory: str = "Results"
 
 recipe_handler: Optional[recipe.RecipeHandler] = recipe.RecipeHandler(init_state)
+optimal_handler: Optional[optimals.OptimalRecipeStorage] = optimals.OptimalRecipeStorage()
 depth_limit = 1
 extra_depth = 0
 case_sensitive = True
 allow_starting_elements = True
-resume_last_run = True
+resume_last_run = False
 write_to_file = True
 
 last_game_state: Optional['GameState'] = None
@@ -99,6 +108,15 @@ class GameState:
                 continue
             steps.append(f"{self.items[left]} + {self.items[right]} = {self.items[i]}")
         return "\n".join(steps)
+
+    def __repr__(self):
+        steps = []
+        for i in range(len(self.state)):
+            left, right = int_to_pair(self.state[i])
+            if (left < 0) or (right < 0):
+                continue
+            steps.append(f"{self.items[left]}={self.items[right]}={self.items[i]}")
+        return "=".join(steps) + "=="
 
     def __len__(self):
         return len(self.state)
@@ -180,15 +198,9 @@ class GameState:
         return self.state[-1]
 
 
-def append_to_file(state: GameState):
+def save_optimal_recipe(state: GameState):
     # print(len(visited))
-    # Make state.tail_item() safe as a filename
-    tail_item = state.tail_item()
-    tail_item = file_sanitize(tail_item)
-    file = os.path.join(result_directory, f"{len(state) - len(init_state)}", f"{tail_item}.txt")
-    os.makedirs(os.path.dirname(file), exist_ok=True)
-    with open(file, "a", encoding="utf-8") as f:
-        f.write(f"{state}\n\n")
+    optimal_handler.add_optimal(state.tail_item(), repr(state))
 
 
 def process_node(state: GameState):
@@ -213,7 +225,7 @@ def process_node(state: GameState):
     if state.tail_item == "Fiji":
         print("!")
     if write_to_file and depth <= best_depths[state.tail_item()] + extra_depth:
-        append_to_file(state)
+        save_optimal_recipe(state)
 
 
 # Depth limited search
@@ -303,6 +315,8 @@ async def main():
     # tracemalloc.start()
     if resume_last_run:
         load_last_state()
+    else:
+        optimal_handler.clear()
 
     headers = recipe.load_json("headers.json")["default"]
     async with aiohttp.ClientSession() as session:

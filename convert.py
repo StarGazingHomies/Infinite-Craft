@@ -9,6 +9,7 @@ from typing import Optional
 import aiohttp
 import bidict
 
+import optimals
 import recipe
 import util
 
@@ -280,18 +281,6 @@ def merge_sql(file_new: str):
         num_recipes += 1
         if num_recipes % 100000 == 0:
             print(f"Processed {num_recipes} recipes")
-
-
-def get_results_for(results: list[str]):
-    recipe_handler = recipe.RecipeHandler(("Water", "Fire", "Wind", "Earth"))
-    for result in results:
-        print(recipe_handler.get_local_results_for(result))
-
-
-def get_recipes_using(elements: list[str]):
-    recipe_handler = recipe.RecipeHandler(("Water", "Fire", "Wind", "Earth"))
-    for element in elements:
-        print(recipe_handler.get_local_results_using(element))
 
 
 @cache
@@ -899,32 +888,6 @@ def analyze_minus_claus(file: str, persistent_file: str):
             print(f"{item[0]}: {item[1]} / {item[2]} ( {item[1] / item[2]} )")
 
 
-def make_ingredients_case_insensitive():
-    rh = recipe.RecipeHandler([])
-
-    recipes_cur = rh.db.cursor()
-    recipes_cur.execute("""
-    SELECT ing1.name, ing2.name, result.name
-    FROM recipes
-    JOIN items   AS ing1   ON ing1.id = recipes.ingredient1_id
-    JOIN items   AS ing2   ON ing2.id = recipes.ingredient2_id
-    JOIN items   AS result ON result.id = recipes.result_id
-    """)
-    recipes_count = 0
-    for r in recipes_cur:
-        recipes_count += 1
-        if recipes_count % 100000 == 0:
-            print(f"Processed {recipes_count} recipes")
-
-        ing1, ing2, result = r
-        # print(ing1, ing2, result)
-        ing1 = util.to_start_case(ing1)
-        ing2 = util.to_start_case(ing2)
-        # print(ing1, ing2, result)
-
-        rh.add_recipe(ing1, ing2, result)
-
-
 def analyze_tmp(file: str):
     with open(file, "r", encoding="utf-8") as f:
         lines = f.readlines()
@@ -1018,9 +981,36 @@ def analyze_folder_save(persistent_file: str, results_folder: str = "Results", o
         fout.write(final_result)
 
 
+def analyze_optimal_save(output_file: str = "4_letter_sequences.txt"):
+    optimal_handler: Optional[optimals.OptimalRecipeStorage] = optimals.OptimalRecipeStorage()
+    count = 0
+    with open(output_file, "w") as fout:
+        pass
+    items: list[tuple[str, str]] = []
+    for item_id, item, best_recipes in optimal_handler.get_all_optimals():
+        best_recipes = best_recipes.split("==")[:-1]
+        first_recipe = best_recipes[0].split("=")
+        if len(item) != 4 or not all([ord('a') <= ord(x) <= ord('z') for x in item.lower()]):
+            continue
+        count += 1
+        # print(f"{item_id}: {item}:")
+        item_str = f"{item}:\n"
+        for i in range(0, len(first_recipe), 3):
+            item_str += f"{first_recipe[i]} + {first_recipe[i+1]} = {first_recipe[i+2]}\n"
+        items.append((item.lower(), item_str))
+    items.sort()
+    with open(output_file, "a") as fout:
+        for _, item_str in items:
+            fout.write(item_str)
+
+    print(count)
+
+
 if __name__ == '__main__':
     pass
-    analyze_folder_save("persistent.json")
+    # analyze_folder_save("persistent.json")
+    analyze_optimal_save()
+    # merge_sql("Depth 12/recipes_depth12_k.db")
     # analyze_tokens("depth12_h_results.txt")
     # analyze_tokens2()
     # analyze_minus_claus("Searches/Minus Claus/minus_claus_data2.json",
