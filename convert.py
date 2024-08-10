@@ -71,10 +71,10 @@ def modify_save_file(file: str, items_file: str, new_file: str):
         json.dump(new_data_2, f)
 
 
-def count_recipes(file: str):
-    with open(file, "r") as f:
-        recipes = json.load(f)
-    print(len(recipes))
+# def count_recipes(file: str):
+#     with open(file, "r") as f:
+#         recipes = json.load(f)
+#     print(len(recipes))
 
 
 def convert_to_result_first(file_name):
@@ -469,13 +469,13 @@ def add_to_recipe_handler(items_file: str, recipes_file: str):
 
 def filter_results(result: str) -> bool:
     # 3 letter search
-    # if len(result) != 3:
-    #     return False
+    if len(result) != 1:
+        return False
     # for char in result.lower():
-    #     if not ord("a") <= ord(char) <= ord("z"):
-    #         return False
-
+    #     if not (ord("a") <= ord(char) <= ord("z") or ord("0") <= ord(char) <= ord("9") or char in (" ", "\t", "-", ".", "_", ",", ":", "’", "'", "/")):
+    #         return True
     return True
+    # return not " " in result
 
 
 def generate_single_best_recipe(input_file: str, output_file: str):
@@ -580,6 +580,21 @@ def compare_persistent_files(file1: str, file2: str):
 
     print("\n".join(missing))
     return
+
+
+def find_specific_items(file: str, items: list[str]):
+    with open(file, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    for item in items:
+        if item in data["BestRecipes"]:
+            print(f"{item}:\n")
+            result = data["BestRecipes"][item]
+            for r in result:
+                print("```asciidoc")
+                for a, b, c in r[:-1]:
+                    print(f"{a} + {b} -> {c}")
+                print(f"{r[-1][0]} + {r[-1][1]} -> {r[-1][2]}  // :: \n```\n")
+            print("--------------------------")
 
 
 def generate_json(input_file: str, output_file: str):
@@ -801,6 +816,127 @@ def analyze_softlocks(file: str, persistent_file: str, *, softlock_limit = 0.95)
             print(f"{item[0]}: {item[1]} / {item[2]} ( {round(item[1] / item[2]*100):.1f}% )")
 
 
+def poseidons(result: str):
+    rh = recipe.RecipeHandler([])
+    crafts = rh.get_crafts(result)
+    with open(f"{result.replace(" ", "_")}_crafts.txt", "w", encoding="utf-8") as f:
+        for craft in crafts:
+            f.write(f"{craft[0]}  +  {craft[1]}\n")
+
+
+def count_poseidons(result: str):
+    rh = recipe.RecipeHandler([])
+    crafts = rh.get_crafts(result)
+    ingredients = {}
+    for craft in crafts:
+        if craft[0] in ingredients:
+            ingredients[craft[0]] += 1
+        else:
+            ingredients[craft[0]] = 1
+        if craft[1] in ingredients:
+            ingredients[craft[1]] += 1
+        else:
+            ingredients[craft[1]] = 1
+
+    with open(f"{result.replace(" ", "_")}_poseidons.json", "w", encoding="utf-8") as f:
+        json.dump(ingredients, f, ensure_ascii=False)
+
+
+def process_poseidons(result: str, file: str):
+    with open(file, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    items = []
+    for key, value in data.items():
+        items.append((key, value))
+    items.sort(key=lambda x: x[1], reverse=True)
+
+    with open(f"{result.replace(" ", "_")}_poseidon_ingredients.txt", "w", encoding="utf-8") as f:
+        for item in items:
+            f.write(f"{item[0]}: {item[1]}\n")
+
+
+def count_ingredients():
+    rh = recipe.RecipeHandler([])
+    recipes_cur = rh.db.cursor()
+    recipes_cur.execute("""SELECT ing1.name, ing2.name, result.name FROM recipes
+    JOIN items AS ing1 ON ing1.id = recipes.ingredient1_id
+    JOIN items AS ing2 ON ing2.id = recipes.ingredient2_id
+    JOIN items AS result ON result.id = recipes.result_id""")
+    ingredients = {}
+    recipe_count = 0
+    for r in recipes_cur:
+        recipe_count += 1
+        if recipe_count % 100000 == 0:
+            print(f"Processed {recipe_count} recipes")
+        if r[0] in ingredients:
+            ingredients[r[0]] += 1
+        else:
+            ingredients[r[0]] = 1
+        if r[1] in ingredients:
+            ingredients[r[1]] += 1
+        else:
+            ingredients[r[1]] = 1
+
+    with open("occurrences.json", "w", encoding="utf-8") as f:
+        json.dump(ingredients, f, ensure_ascii=False)
+
+
+def process_poseidons_percentage(result: str, poseidon_file: str, occurrences_file: str):
+    with open(poseidon_file, "r", encoding="utf-8") as f:
+        poseidons = json.load(f)
+
+    with open(occurrences_file, "r", encoding="utf-8") as f:
+        occurrences = json.load(f)
+
+    items = []
+    for key, value in poseidons.items():
+        if key in occurrences:
+            items.append((key, value, occurrences[key]))
+    items.sort(key=lambda x: x[1] / x[2], reverse=True)
+
+    with open(f"{result.replace(" ", "_")}_poseidon_ingredients_percentage.txt", "w", encoding="utf-8") as f:
+        for item in items:
+            f.write(f"{item[0]:<30}: {item[1]:>5} / {item[2]:>5} ( {item[1] / item[2]*100:.2f}% )\n")
+
+
+def count_recipes():
+    rh = recipe.RecipeHandler([])
+    recipes_cur = rh.db.cursor()
+    recipes_cur.execute("""SELECT ing1.name, ing2.name, result.name FROM recipes
+    JOIN items AS ing1 ON ing1.id = recipes.ingredient1_id
+    JOIN items AS ing2 ON ing2.id = recipes.ingredient2_id
+    JOIN items AS result ON result.id = recipes.result_id""")
+
+    result_count = {}
+    recipe_count = 0
+    for r in recipes_cur:
+        recipe_count += 1
+        if recipe_count % 100000 == 0:
+            print(f"Processed {recipe_count} recipes")
+        if r[2] in result_count:
+            result_count[r[2]] += 1
+        else:
+            result_count[r[2]] = 1
+
+    with open("result_count.json", "w", encoding="utf-8") as f:
+        json.dump(result_count, f, ensure_ascii=False)
+
+
+def analyze_recipes(file: str):
+    with open(file, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    items = []
+    for key, value in data.items():
+        if key == "Nothing" or key == "Nothing\t":
+            continue
+        items.append((key, value))
+    items.sort(key=lambda x: x[1], reverse=True)
+    for item in items[:51]:
+        print(f"{item[0]}: {item[1]}")
+
+
 def find_minus_claus():
     rh = recipe.RecipeHandler([])
     items_cur = rh.db.cursor()
@@ -1008,8 +1144,16 @@ def analyze_optimal_save(output_file: str = "4_letter_sequences.txt"):
 
 if __name__ == '__main__':
     pass
+    # count_recipes()
+    # analyze_recipes("result_count.json")
+    # poseidons()
+    # count_ingredients()
+    s = "Poseidon"
+    # count_poseidons(s)
+    # process_poseidons(s, f"{s.replace(" ", "_")}_poseidons.json")
+    # process_poseidons_percentage(s, f"{s.replace(" ", "_")}_poseidons.json", "occurrences.json")
     # analyze_folder_save("persistent.json")
-    analyze_optimal_save()
+    # analyze_optimal_save()
     # merge_sql("Depth 12/recipes_depth12_k.db")
     # analyze_tokens("depth12_h_results.txt")
     # analyze_tokens2()
@@ -1021,8 +1165,12 @@ if __name__ == '__main__':
     # if os.name == 'nt':
     #     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     # asyncio.run(main())
-    # export_items("Depth 12/persistent_depth12_h.json", "depth12_h_results.txt")
-    # generate_single_best_recipe("Depth 12/persistent_depth12_h.json", "Depth 12/depth12_h_single_best.txt")
+    # export_items("Depth 12/persistent_depth12_complete.json", "Depth 12/depth12_complete_results_1char.txt")
+
+    # targets = "Clefable, Dewgong, Doduo, Exeggutor, Hypno, Machoke, Onix, Victreebel, Weezing, Arbok, Dratini, Electrode, Horsea, Jynx, Machop, Magnemite, Paras, Hitmonchan, Krabby, Pinsir, Poliwhirl, Hitmonlee, Spearow, Fearow, Tangela, Electabuzz, Kabuto, Psyduck, Bellsprout, Chansey, Poliwag, Missingno"
+    # find_specific_items("Depth 12/persistent_depth12_complete.json", targets.split(", "))
+
+    # generate_single_best_recipe("Depth 12/persistent_depth12_complete.json", "Depth 12/depth12_complete_single_best.txt")
     # compare_persistent_files("Depth 11/persistent_depth11_pass3.json", "Depth 11/persistent_depth11_pass2.json")
     # l = [10, 29, 113, 414, 1642, 7823, 39295, 209682]
     # print("\n".join([f"{l[i-1]}, {ordered_total(0, 0, i)}" for i in range(1, 9)]))

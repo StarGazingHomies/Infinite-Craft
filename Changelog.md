@@ -11,9 +11,12 @@ Maybe even alpha-beta pruning (using heuristic)?
 
 ## Version 1.5.3
 
-- (Temporary) optimal recipes in the Results folder.
-This will be changed into a proper database at *some* point, but it's
-mostly just to get the optimals out of memory and onto disk.
+- Simple results database `optimals.py` for the main results
+- Added some placeholder files for more optimizer algos trading time
+for result optimality, which I hope to implement soon.
+- Added a simple optimizer benchmarker
+- TODO: Optimize the A* algorithm to shave off around an order of magnitude
+of constant factor. (Previously 117.887s for 41 Alphabet g0.5 d3)
 
 ## Version 1.5.2
 

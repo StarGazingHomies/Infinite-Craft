@@ -1,6 +1,4 @@
 import atexit
-import json
-import math
 import os
 import random
 import sys
@@ -11,12 +9,10 @@ from urllib.parse import quote_plus
 
 import aiohttp
 import asyncio
-from bidict import bidict
 import sqlite3
 
 import util
-from util import int_to_pair, pair_to_int, WORD_COMBINE_CHAR_LIMIT
-
+from util import WORD_COMBINE_CHAR_LIMIT, load_json
 
 # Insert a recipe into the database
 insert_recipe = ("""
@@ -41,16 +37,6 @@ query_recipe = ("""
     """)
 
 
-def load_json(file: str) -> dict:
-    try:
-        with open(file, "r", encoding='utf-8') as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return {}
-    except json.JSONDecodeError:
-        return {}
-
-
 class RecipeHandler:
     db: sqlite3.Connection
     db_location: str = "cache/recipes.db"
@@ -62,7 +48,7 @@ class RecipeHandler:
     sleep_time: float = 1.0
     sleep_default: float = 1.0
     retry_exponent: float = 2.0
-    local_only: bool = False
+    local_only: bool = True
     trust_cache_nothing: bool = True             # Trust the local cache for "Nothing" results
     trust_first_run_nothing: bool = False        # Save as "Nothing" in the first run
     local_nothing_indication: str = "Nothing\t"  # Indication of untrusted "Nothing" in the local cache
@@ -352,6 +338,9 @@ class RecipeHandler:
         while True:
             try:
                 # print(url, type(url))
+                # cookies = session.cookie_jar.filter_cookies('https://neal.fun/infinite-craft/')
+                # for key, cookie in cookies.items():
+                #     print('Key: "%s", Value: "%s"' % (cookie.key, cookie.value))
                 async with session.get(url, headers=self.headers) as resp:
                     # print(resp.status)
                     if resp.status == 200:

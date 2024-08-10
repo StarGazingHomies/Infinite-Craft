@@ -6,13 +6,15 @@ import argparse
 import time
 
 import aiohttp
+import urllib3.util
+import yarl
 
 import recipe
 import speedrun
 import util
 import optimizers.a_star as a_star
 import optimizers.simple_generational as simple_generational
-from optimizers.optimizer_interface import OptimizerRecipeList, optimizer_recipes_to_savefile
+from optimizers.optimizer_interface import OptimizerRecipeList, optimizer_recipes_to_dict, optimizer_recipes_from_dict
 
 
 # A* (bottom-up, single destination)
@@ -145,17 +147,32 @@ async def main(*,
     final_items_for_current_recipe = list(util.DEFAULT_STARTING_ITEMS) + craft_results
 
     # Request and build items cache
-    headers = recipe.load_json("headers.json")["default"]
+    headers = util.load_json("headers.json")["default"]
     with recipe.RecipeHandler(final_items_for_current_recipe, local_only=local_only) as rh:
         async with aiohttp.ClientSession() as session:
-            async with session.get("https://neal.fun/infinite-craft/", headers=headers) as resp:
-                pass
+            url = yarl.URL("https://neal.fun/infinite-craft/")
+            cookies = util.load_json("cookies.json")
+            for key, value in cookies.items():
+                session.cookie_jar.update_cookies({key: value}, url)
+            # async with session.get("https://neal.fun/infinite-craft/", headers=headers) as resp:
+            #     print("Status:", resp.status)
+            #     print("Content-type:", resp.headers['content-type'])
+            #     print("Body:", await resp.text())
+            #
+            #     cookies = session.cookie_jar.filter_cookies(url)
+            #     for key, cookie in cookies.items():
+            #         print('Key: "%s", Value: "%s"' % (cookie.key, cookie.value))
             optimizer_recipes = await initialize_optimizer(
                 session,
                 rh,
                 final_items_for_current_recipe,
                 extra_generations,
                 local_generations)
+            cookie_json = {}
+            for key, cookie in cookies.items():
+                cookie_json[key] = cookie.value
+            util.save_json("cookies.json", cookie_json)
+    return
 
     # Generate generations
     optimizer_recipes.generate_generations()
@@ -164,10 +181,10 @@ async def main(*,
     initial_crafts = [optimizer_recipes.get_id(item) for item in list(util.DEFAULT_STARTING_ITEMS) + craft_results]
 
     # Artificial targets, when args just don't cut it because there's too many
-    # alphabets = [chr(i) for i in range(ord('a'), ord('z') + 1)]
-    # target = []
-    # for c in alphabets:
-    #     target.append(c)
+    alphabets = [chr(i) for i in range(ord('a'), ord('z') + 1)]
+    target = []
+    for c in alphabets:
+        target.append(c)
     #     target.append(f".{c}")
     #     target.append(f"\"{c}\"")
     # print(target)
@@ -180,9 +197,40 @@ async def main(*,
 
     # Run the optimizer
     print(f"Optimizing for {target}...")
+    # optimizer_setup = {
+    #     "targets": target,
+    #     "recipe_list": optimizer_recipes_to_dict(optimizer_recipes),
+    #     "upper_bound": max_crafts,
+    #     "initial_crafts": initial_crafts,
+    #     "max_deviations": deviation,
+    # }
+    # with open("optimizer_setup.json", "w", encoding="utf-8") as f:
+    #     json.dump(optimizer_setup, f, indent=4, ensure_ascii=False)
     result = a_star.optimize(target, optimizer_recipes, max_crafts, initial_crafts, deviation)
 
     # End timer
+    end_time = time.perf_counter()
+    print(f"Time taken: {end_time - start_time:.3f}s")
+
+
+def load_optimizer_setup(file: str):
+    with open(file, "r", encoding="utf-8") as f:
+        optimizer_setup = json.load(f)
+    optimizer_recipes = optimizer_recipes_from_dict(optimizer_setup["recipe_list"])
+    return optimizer_setup, optimizer_recipes
+
+
+def benchmark_optimizer(file: str):
+    optimizer_setup, optimizer_recipes = load_optimizer_setup(file)
+
+    # Run the optimizer
+    print(f"Benchmarking for {optimizer_setup['targets']}...")
+    start_time = time.perf_counter()
+    result = a_star.optimize(optimizer_setup["targets"],
+                             optimizer_recipes,
+                             optimizer_setup["upper_bound"],
+                             optimizer_setup["initial_crafts"],
+                             optimizer_setup["max_deviations"])
     end_time = time.perf_counter()
     print(f"Time taken: {end_time - start_time:.3f}s")
 
@@ -225,7 +273,12 @@ def parse_arguments():
     return parser.parse_args()
 
 
+def benchmark_main():
+    benchmark_optimizer("optimizer_benchmark_alphabet41_0.5_3.json")
+
+
 if __name__ == '__main__':
+    # benchmark_main()
     args = parse_arguments()
 
     if os.name == 'nt':

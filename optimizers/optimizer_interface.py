@@ -141,8 +141,8 @@ class OptimizerRecipeList:
             return
         self.gen_generated = True
 
-        self.gen: dict[int, int] = {}          # The generation of each element
-        visited: list[int] = []                # Already processed elements
+        self.gen: dict[int, int] = {}  # The generation of each element
+        visited: list[int] = []  # Already processed elements
         for item in init_items:
             self.gen[self.get_id(item)] = 0
             visited.append(self.get_id(item))
@@ -186,6 +186,37 @@ class OptimizerRecipeList:
         ...
 
 
+def optimizer_recipes_to_dict(optimizer_recipes: OptimizerRecipeList) -> dict:
+    return {
+        "ids": dict(optimizer_recipes.ids),
+        "id_capitalized": optimizer_recipes.id_capitalized,
+        "fwd": optimizer_recipes.fwd,
+        "bwd": optimizer_recipes.bwd,
+        "gen": optimizer_recipes.gen,
+        "gen_generated": optimizer_recipes.gen_generated,
+        "hybrid_gen": optimizer_recipes.hybrid_gen,
+        "hybrid_gen_generated": optimizer_recipes.hybrid_gen_generated,
+        "depth": optimizer_recipes.depth
+    }
+
+
+def optimizer_recipes_from_dict(data: dict) -> OptimizerRecipeList:
+    optimizer_recipes = OptimizerRecipeList([])
+    optimizer_recipes.ids = bidict(data["ids"])
+    optimizer_recipes.id_capitalized = {int(k): v for k, v in data["id_capitalized"].items()}
+    optimizer_recipes.fwd = {int(k): v for k, v in data["fwd"].items()}
+    optimizer_recipes.bwd = {int(k): v for k, v in data["bwd"].items()}
+    optimizer_recipes.gen = {int(k): v for k, v in data["gen"].items()}
+    optimizer_recipes.gen_generated = data["gen_generated"]
+    try:
+        optimizer_recipes.hybrid_gen = {int(k): v for k, v in data["hybrid_gen"].items()}
+    except AttributeError:
+        optimizer_recipes.hybrid_gen = {}
+    optimizer_recipes.hybrid_gen_generated = data["hybrid_gen_generated"]
+    optimizer_recipes.depth = {int(k): v for k, v in data["depth"].items()}
+    return optimizer_recipes
+
+
 def savefile_to_optimizer_recipes(file: str) -> OptimizerRecipeList:
     with open(file, "r", encoding='utf-8') as file:
         data = json.load(file)
@@ -205,7 +236,9 @@ def savefile_to_optimizer_recipes(file: str) -> OptimizerRecipeList:
 def optimizer_recipes_to_savefile(optimizer: OptimizerRecipeList) -> dict:
     recipes_raw = {}
     for result, recipe_list in optimizer.bwd.items():
-        recipes_raw[optimizer.get_name(result)] = [({"text": optimizer.get_name(ingredient1)}, {"text": optimizer.get_name(ingredient2)}) for ingredient1, ingredient2 in recipe_list]
+        recipes_raw[optimizer.get_name(result)] = [
+            ({"text": optimizer.get_name(ingredient1)}, {"text": optimizer.get_name(ingredient2)}) for
+            ingredient1, ingredient2 in recipe_list]
 
     elements_raw = [{"text": optimizer.get_name_capitalized(i)} for i in range(len(optimizer.ids))]
 

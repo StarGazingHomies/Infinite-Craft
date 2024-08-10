@@ -1,3 +1,4 @@
+import json
 import math
 
 import llama_cpp
@@ -62,29 +63,51 @@ class Tokenizer:
         return self.tokenizer.decode(tokens)
 
 
+def main():
+    from transformers import pipeline
+    pipe = pipeline(model='togethercomputer/GPT-JT-6B-v1')
+    print(pipe('''Hi! A:'''))
+
+
 if __name__ == "__main__":
-    # model_name = "Havmand/minillama"
-    # model_file = "minillama.gguf"
-    t = Tokenizer()
+    main()
+    # # model_name = "Havmand/minillama"
+    # # model_file = "minillama.gguf"
+    # t = Tokenizer()
+    #
+    # # model_name = "TheBloke/CodeLlama-7B-GGUF"
+    # # model_file = "codellama-7b.Q2_K.gguf"
+    # # model_path = hf_hub_download(model_name, filename=model_file)
+    #
+    # # Load the model, tokenizer only
+    # # model = Llama(model_path)
+    # # tokenizer: llama_cpp.LlamaTokenizer = model.tokenizer()
+    #
+    # prompt = "- J a y -"
+    # print(f"Prompt: {prompt}")
+    #
+    # # Tokenize the prompt
+    # tokens = t.tokenize(prompt)
+    # print(f"{len(tokens) - 1} tokens: {tokens}")
+    #
+    # # Decode the tokens
+    # for token in tokens:
+    #     if token == 1:
+    #         print(f"Token: {token}, <Start Token>")
+    #     else:
+    #         print(f"Token: {token}, {t.decode([token])}")
 
-    # model_name = "TheBloke/CodeLlama-7B-GGUF"
-    # model_file = "codellama-7b.Q2_K.gguf"
-    # model_path = hf_hub_download(model_name, filename=model_file)
 
-    # Load the model, tokenizer only
-    # model = Llama(model_path)
-    # tokenizer: llama_cpp.LlamaTokenizer = model.tokenizer()
+def load_json(file: str) -> dict:
+    try:
+        with open(file, "r", encoding='utf-8') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}
+    except json.JSONDecodeError:
+        return {}
 
-    prompt = "- J a y -"
-    print(f"Prompt: {prompt}")
 
-    # Tokenize the prompt
-    tokens = t.tokenize(prompt)
-    print(f"{len(tokens) - 1} tokens: {tokens}")
-
-    # Decode the tokens
-    for token in tokens:
-        if token == 1:
-            print(f"Token: {token}, <Start Token>")
-        else:
-            print(f"Token: {token}, {t.decode([token])}")
+def save_json(file: str, data: dict):
+    with open(file, "w", encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)

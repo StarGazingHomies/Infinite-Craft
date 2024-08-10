@@ -8,6 +8,7 @@ from typing import Optional
 import aiohttp
 
 import recipe
+import util
 
 # elements = ["Hydrogen", "Helium", "Lithium", "Beryllium", "Boron", "Carbon", "Nitrogen", "Oxygen", "Fluorine", "Neon",
 #             "Sodium", "Magnesium", "Aluminium", "Silicon", "Phosphorus", "Sulfur", "Chlorine", "Argon", "Potassium",
@@ -295,7 +296,7 @@ async def dynamic_check_script(speedrun_recipe: SpeedrunRecipe) -> bool:
     # Format: ... + ... -> ...
     has_issues = False
     async with aiohttp.ClientSession() as session:
-        headers = recipe.load_json("headers.json")["default"]
+        headers = util.load_json("headers.json")["default"]
         async with session.get("https://neal.fun/infinite-craft/", headers=headers) as resp:
             pass
         for i, craft in enumerate(crafts):
