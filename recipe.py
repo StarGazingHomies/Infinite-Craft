@@ -56,6 +56,7 @@ class RecipeHandler:
     nothing_verification: int = 3  # Verify "Nothing" n times with the API
     nothing_cooldown: float = 5.0  # Cooldown between "Nothing" verifications
     connection_timeout: float = 10.0  # Connection timeout
+    batch_limit: int = 50  # Maximum number of requests in a batch
 
     print_new_recipes: bool = True
 
@@ -326,7 +327,7 @@ class RecipeHandler:
         return r['result']
 
     async def combine_batch(self, session: aiohttp.ClientSession, batch: list[tuple[str, str]]) -> \
-        list[tuple[str, str, Optional[str]]]:
+            list[tuple[str, str, Optional[str]]]:
         # Query local cache
         local_results = [self.get_local(a, b) for a, b in batch]
         final_results = [(a, b, None) for a, b in batch]
@@ -347,15 +348,18 @@ class RecipeHandler:
                 final_results[i] = (a, b, local_results[i])
 
         if need_request:
-            r = await self.request_batch(session, need_request)
-            for i, result in enumerate(r):
-                a, b = need_request[i]
-                # print(a, b, result)
-                if 'error' in result:
-                    result = {"result": "Nothing", "emoji": "", "isNew": False}
-                else:
-                    self.save_response(a, b, result)
-                final_results[batch.index((a, b))] = (a, b, result['result'])
+            for i in range(0, len(need_request), self.batch_limit):
+                current_batch = need_request[i:i + self.batch_limit]
+                r = await self.request_batch(session, current_batch)
+                for i, result in enumerate(r):
+                    a, b = current_batch[i]
+                    # print(a, b, result)
+                    if 'error' in result:
+                        result = {"result": "Nothing", "emoji": "", "isNew": False}
+                        # Log the error?
+                    else:
+                        self.save_response(a, b, result)
+                    final_results[batch.index((a, b))] = (a, b, result['result'])
 
         return final_results
 

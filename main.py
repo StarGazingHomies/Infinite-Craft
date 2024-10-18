@@ -73,10 +73,10 @@ persistent_config = util.load_json("config.json")
 
 recipe_handler: Optional[recipe.RecipeHandler] = recipe.RecipeHandler(init_state, **persistent_config)
 optimal_handler: Optional[optimals.OptimalRecipeStorage] = optimals.OptimalRecipeStorage()
-depth_limit = 3
+depth_limit = 4
 extra_depth = 0
 case_sensitive = True
-allow_starting_elements = True
+allow_starting_elements = False
 resume_last_run = False
 write_to_file = True
 
@@ -258,6 +258,19 @@ async def dls(session: aiohttp.ClientSession, state: GameState, depth: int) -> i
     # Even if we allowed starting element results, we're still not going to continue from such a state
     if allow_starting_elements and state.tail_item() in state.items[:-1]:
         return 0
+
+    # Batch request all possible combinations at this state
+    # so that we cache it
+    # Very simple way to implement batching so that I can start requesting again
+    # before pitching to writing my own state queue
+
+    request_list = []
+    for i, u in enumerate(state.items):
+        for j, v in enumerate(state.items):
+            if i <= j:
+                request_list.append((u, v))
+    # First do the batch requests
+    await recipe_handler.combine_batch(session, request_list)
 
     count = 0  # States counter
     unused_items = state.unused_items()  # Unused items
