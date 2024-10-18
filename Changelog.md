@@ -1,12 +1,40 @@
 # Changelog
 
 TODO:
-- Better configuration (CLI arguments)
-- Tokenizers & analysis (w/ transformers and a llama-like model, such as minillama)
 - Hybrid Step-Generation Preprocessing
-- N-Step-Lookahead Generational Algorithm for savefiles?
-Maybe even alpha-beta pruning?
+- N-Step-Lookahead Generational Algorithm?
+Maybe even alpha-beta pruning (using heuristic)?
+- In-place Procedural Removal
+- Visualization (trees!)
+- Crafting Tree Location File Generation?
+- OptimizerRecipeList and RecipeHandler common interface
+- Queueing system for requests (instead of just locking)
 
+## Version 1.5.3
+
+- Simple results database `optimals.py` for the main results
+- Added some placeholder files for more optimizer algos trading time
+for result optimality, which I hope to implement soon.
+- Added a simple optimizer benchmarker
+- TODO: Optimize the A* algorithm to shave off around an order of magnitude
+of constant factor. (Previously 117.887s for 41 Alphabet g0.5 d3)
+
+## Version 1.5.2
+
+- Added `SpeedrunRecipe` to store speedrun recipes.
+- Speedruns now follow the following format:
+```prolog
+Water  +  Earth  =  Plant  // Comments require two spaces before them
+Earth  +  Plant  =  Tree  // Note that there are doube spaces around + and =
+// Or they can be at the start of a line
+/*
+And multiline comments go like this
+*/
+Water  +  Tree  /* Or even like this, but there must be two spaces! */  =  River
+Earth  +  Tree  =  Forest  // :: double colon indicates that this is a result element
+```
+- Some token analysis in `convert.py`
+- `persistent.json` results split into a `Results/` directory
 
 ## Version 1.5.1
 
@@ -17,17 +45,18 @@ Maybe even alpha-beta pruning?
 ## Version 1.5
 
 Added optimizers for speedrunning paths and finding optimal paths in savefiles!
-
-- Separated the `pair_to_int` and `int_to_pair` functions 
-along with static variables such as `DEFAULT_STARTING_ITEMS` 
-and `WORD_COMBINE_CHAR_LIMIT`into `util.py`.
-- Added a `OptimizerRecipeList` class for a common interface
-between all of the optimizers that will be implemented.
 - Added an A* algorithm `optimizers/a_star.py` starting from the result 
 element with a generation-based admissible heuristic. (Source: BRH0208)
 - Added a simple generational algorithm `optimizers/simple_generational.py` 
 starting from the result element with a generation-based heuristic, 
 made for fast analysis of savefiles. Used on yui's site (Infinite Craft Browser).
+
+Other changes
+- Separated the `pair_to_int` and `int_to_pair` functions 
+along with static variables such as `DEFAULT_STARTING_ITEMS` 
+and `WORD_COMBINE_CHAR_LIMIT`into `util.py`.
+- Added a `OptimizerRecipeList` class for a common interface
+between all the optimizers.
 
 ## Version 1.4
 

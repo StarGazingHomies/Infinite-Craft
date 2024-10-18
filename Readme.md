@@ -15,7 +15,10 @@ Install the required packages with:
 pip install -r requirements.txt
 ```
 
-To run the script, simply run:
+Then, you need to provide headers in `headers.json` for the Neal API.
+This is not a tutorial on how to scrape the API.
+
+To run the script to start searching low-depth elements, simply run:
 ```commandline
 python main.py
 ```

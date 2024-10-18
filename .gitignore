@@ -11,6 +11,9 @@ misc/*
 *.json
 *.db
 
+# Random temporary files
+random/*
+
 # Spreadsheet wee
 3 letter spreadsheet/*
 

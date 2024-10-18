@@ -29,24 +29,39 @@ class OptimizerRecipeList:
     gen: Optional[dict[int, int]]
     # Whether the generation has been generated, so nothing happens again
     gen_generated: bool = False
+    # TODO: Hybrid generation of each element
+    # item_id -> generation
+    hybrid_gen: Optional[dict[int, int]]
+    hybrid_gen_generated: bool = False
+    # Depth of each element, provided by external algorithm
+    depth: Optional[dict[int, int]]
 
     def __init__(self, items: list[str]):
         self.fwd = {}
         self.bwd = {}
         self.ids = bidict()
         self.id_capitalized = {}
-        for i, item in enumerate(items):
-            self.ids[item.lower()] = i
-            self.id_capitalized[i] = item
+        for item in items:
+            if item.lower() in self.ids:
+                continue
+            self.add_item(item)
         self.gen = None
+        self.hybrid_gen = None
+        self.depth = {}
 
     def __str__(self):
         return f"OptimizerRecipeList with {len(self.ids)} items and {len(self.fwd)} recipes"
 
     def add_item(self, item: str) -> int:
-        self.ids[item.lower()] = len(self.ids)
-        self.id_capitalized[len(self.ids) - 1] = item
-        return len(self.ids) - 1
+        # Why does this check need to exist?
+        # if item.lower() in self.ids:
+        #     return self.ids[item.lower()]
+
+        new_id = len(self.ids)
+        # print(new_id)
+        self.ids[item.lower()] = new_id
+        self.id_capitalized[new_id] = item
+        return new_id
 
     def get_name(self, item_id: int) -> str:
         return self.ids.inv[item_id]
@@ -60,12 +75,38 @@ class OptimizerRecipeList:
         except KeyError:
             # Silently ignore, because borked savefiles yay
             # print(f"{name} not found!")
-            return self.add_item(name)
+            return self.add_item(name.lower())
 
     def get_generation_id(self, item_id: int) -> Optional[int]:
         if self.gen is None:
             return None
         return self.gen.get(item_id)
+
+    def get_hybrid_generation_id(self, item_id: int) -> Optional[int]:
+        if self.hybrid_gen is None:
+            return None
+        return self.hybrid_gen.get(item_id)
+
+    def get_depth_id(self, item_id: int) -> Optional[int]:
+        if self.depth is None:
+            return None
+        return self.depth.get(item_id)
+
+    def get_best_minimum_bound(self, item_id: int) -> Optional[int]:
+        bounds = []
+        depth = self.get_depth_id(item_id)
+        if depth:
+            bounds.append(depth)
+        hybrid_generation = self.get_hybrid_generation_id(item_id)
+        if hybrid_generation:
+            bounds.append(hybrid_generation)
+        generation = self.get_generation_id(item_id)
+        if generation:
+            bounds.append(generation)
+
+        if len(bounds) == 0:
+            return None
+        return max(bounds)
 
     def add_recipe_id(self, result: int, ingredient1: int, ingredient2: int):
         # Add to backward
@@ -100,8 +141,8 @@ class OptimizerRecipeList:
             return
         self.gen_generated = True
 
-        self.gen: dict[int, int] = {}          # The generation of each element
-        visited: list[int] = []                # Already processed elements
+        self.gen: dict[int, int] = {}  # The generation of each element
+        visited: list[int] = []  # Already processed elements
         for item in init_items:
             self.gen[self.get_id(item)] = 0
             visited.append(self.get_id(item))
@@ -138,11 +179,42 @@ class OptimizerRecipeList:
 
         return
 
-    def hybrid_generations(self, num_steps: int = 5, init_items: list[str] = DEFAULT_STARTING_ITEMS) -> None:
-        # TODO: Hybrid IDDFS for full steps until num_steps, then generate generations
+    def generate_hybrid_generations(self, num_steps: int = 5, init_items: list[str] = DEFAULT_STARTING_ITEMS) -> None:
+        # TODO: Hybrid - IDDFS for full steps until num_steps, then generate generations
         # Likely a better heuristic than simple generations.
         # Trading a bit more precompute for faster algorithm execution / better heuristic.
         ...
+
+
+def optimizer_recipes_to_dict(optimizer_recipes: OptimizerRecipeList) -> dict:
+    return {
+        "ids": dict(optimizer_recipes.ids),
+        "id_capitalized": optimizer_recipes.id_capitalized,
+        "fwd": optimizer_recipes.fwd,
+        "bwd": optimizer_recipes.bwd,
+        "gen": optimizer_recipes.gen,
+        "gen_generated": optimizer_recipes.gen_generated,
+        "hybrid_gen": optimizer_recipes.hybrid_gen,
+        "hybrid_gen_generated": optimizer_recipes.hybrid_gen_generated,
+        "depth": optimizer_recipes.depth
+    }
+
+
+def optimizer_recipes_from_dict(data: dict) -> OptimizerRecipeList:
+    optimizer_recipes = OptimizerRecipeList([])
+    optimizer_recipes.ids = bidict(data["ids"])
+    optimizer_recipes.id_capitalized = {int(k): v for k, v in data["id_capitalized"].items()}
+    optimizer_recipes.fwd = {int(k): v for k, v in data["fwd"].items()}
+    optimizer_recipes.bwd = {int(k): v for k, v in data["bwd"].items()}
+    optimizer_recipes.gen = {int(k): v for k, v in data["gen"].items()}
+    optimizer_recipes.gen_generated = data["gen_generated"]
+    try:
+        optimizer_recipes.hybrid_gen = {int(k): v for k, v in data["hybrid_gen"].items()}
+    except AttributeError:
+        optimizer_recipes.hybrid_gen = {}
+    optimizer_recipes.hybrid_gen_generated = data["hybrid_gen_generated"]
+    optimizer_recipes.depth = {int(k): v for k, v in data["depth"].items()}
+    return optimizer_recipes
 
 
 def savefile_to_optimizer_recipes(file: str) -> OptimizerRecipeList:
@@ -159,6 +231,23 @@ def savefile_to_optimizer_recipes(file: str) -> OptimizerRecipeList:
             optimizer.add_recipe_name(result, recipe[0]['text'], recipe[1]['text'])
 
     return optimizer
+
+
+def optimizer_recipes_to_savefile(optimizer: OptimizerRecipeList) -> dict:
+    recipes_raw = {}
+    for result, recipe_list in optimizer.bwd.items():
+        recipes_raw[optimizer.get_name(result)] = [
+            ({"text": optimizer.get_name(ingredient1)}, {"text": optimizer.get_name(ingredient2)}) for
+            ingredient1, ingredient2 in recipe_list]
+
+    elements_raw = [{"text": optimizer.get_name_capitalized(i)} for i in range(len(optimizer.ids))]
+
+    data = {
+        "recipes": recipes_raw,
+        "elements": elements_raw
+    }
+
+    return data
 
 
 def main():

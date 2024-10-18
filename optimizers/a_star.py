@@ -6,10 +6,14 @@ Based on BRH0208's A*
 Note: This is not applicable for high-density recipe books or super-high-generation recipes.
 because branching factor will apply rather quickly
 """
+import json
 
-from optimizers.optimizer_interface import OptimizerRecipeList, savefile_to_optimizer_recipes
+from optimizers.optimizer_interface import OptimizerRecipeList, savefile_to_optimizer_recipes, \
+    optimizer_recipes_to_savefile
 from recipe import RecipeHandler
 import heapq
+
+from speedrun import SpeedrunRecipe
 
 
 class AStarOptimizerState:
@@ -55,7 +59,7 @@ class AStarOptimizerState:
         # Takes into account repeating generations.
         if len(self.current) == 0:
             return self.craft_count
-        generations = [recipe_list.get_generation_id(i) for i in self.current]
+        generations = [recipe_list.get_best_minimum_bound(i) for i in self.current]
         generations.sort()
         for i in range(1, len(generations)):
             generations[i] = max(generations[i], generations[i - 1] + 1)
@@ -68,6 +72,7 @@ class AStarOptimizerState:
     def get_children(self, u: int) -> set[int]:
         # Gets all elements that depends on u
         # to check for circular dependencies
+        # TODO: potentially remove this method & save dependent elements for better performance
         dependency_set = {u}
         while True:
             new_items = set()
@@ -93,6 +98,7 @@ class AStarOptimizerState:
         result = []
 
         # Craft highest generation item
+        # TODO: Experiment with crafting order
         item_id = max(self.current, key=lambda x: recipe_list.get_generation_id(x))
         item_children = self.get_children(item_id)
         # print(self.pretty_str(recipe_list))
@@ -101,7 +107,6 @@ class AStarOptimizerState:
         cur_remaining = self.current.copy()
         cur_remaining.remove(item_id)
         # print(f"Expanding element {recipe_list.get_name_capitalized(item_id)}")
-        # print(f"{[recipe_list.get_name_capitalized(x) for x in item_children]} are dependent on {recipe_list.get_name_capitalized(item_id)}.")
 
         for u, v in recipe_list.get_ingredients_id(item_id):
             # Check for circular dependencies
@@ -116,7 +121,6 @@ class AStarOptimizerState:
                 new_items.add(u)
             if recipe_list.get_generation_id(v) != 0 and v not in self.crafted:
                 new_items.add(v)
-            # print(f"Crafting {recipe_list.get_name_capitalized(u)} + {recipe_list.get_name_capitalized(v)} -> {recipe_list.get_name_capitalized(item_id)}")
             result.append(AStarOptimizerState(recipe_list,
                                               self.craft_count + 1,
                                               new_items,
@@ -139,7 +143,10 @@ def optimize(
         recipe_list: OptimizerRecipeList,
         upper_bound: int,
         initial_crafts: list[int] = None,
-        max_deviations: int = 128) -> list[AStarOptimizerState]:
+        max_deviations: int = 128,
+        *,
+        print_status: bool = True,
+        self_generate_heuristic: bool = False) -> list[SpeedrunRecipe]:
     # Parsing args
     check_deviations = False
     if initial_crafts and max_deviations >= 0:
@@ -148,10 +155,47 @@ def optimize(
     # Generate generations
     recipe_list.generate_generations()
 
+    # Generate heuristics using the algorithm itself, for multiple targets
+    # TODO: Experimental, refine this / consider a different method to generate better heuristic
+    # if self_generate_heuristic:
+    #     # Sort by generation
+    #     items = list(recipe_list.ids)
+    #     items.sort(key=lambda x: recipe_list.get_generation_id(recipe_list.get_id(x)))
+    #
+    #     for i, item in enumerate(items):
+    #         progress = int(i / len(items) * 100)
+    #         last_progress = int((i - 1) / len(items) * 100)
+    #         if progress != last_progress:
+    #             print(f"Generating heuristic: {progress}%")
+    #         if recipe_list.get_generation_id(recipe_list.get_id(item)) == 0:
+    #             # print(f"Skipping {item}")
+    #             continue
+    #         # Optimize for each individual item to get the depth
+    #         # print(f"Optimizing for {item}")
+    #         LIMIT = 6
+    #         optimals = optimize(
+    #             [item],
+    #             recipe_list,
+    #             LIMIT,
+    #             initial_crafts,
+    #             max_deviations,
+    #             print_status=False,
+    #             self_generate_heuristic=False)
+    #         if len(optimals) == 0:
+    #             print(f"Failed to optimize for {item}")
+    #             recipe_list.depth[recipe_list.get_id(item)] = LIMIT
+    #             continue
+    #         depth = optimals[0].craft_count
+    #         recipe_list.depth[recipe_list.get_id(item)] = depth
+    #         print(f"Optimal depth for {item} is {depth}")
+
+    # Check if targets are valid
     target_ids = [recipe_list.get_id(target) for target in targets]
     for i, target_id in enumerate(target_ids):
         if target_id is None:
             raise ValueError(f"Target {targets[i]}not found in recipe list!")
+        if recipe_list.get_generation_id(target_id) is None:
+            raise ValueError(f"Target {targets[i]} has no generation ID!")
 
     # Initialize the starting state
     start = AStarOptimizerState(recipe_list, 0, set(target_ids))
@@ -178,15 +222,17 @@ def optimize(
 
         # Information
         processed_states += 1
-        if current_state.heuristic > min_heuristic:
-            min_heuristic = current_state.heuristic
-            print(f"Processed: {processed_states}, Queue length: {len(priority_queue)}, Min heuristic in queue: {min_heuristic}")
-        if processed_states % 10000 == 0:
-            print(f"Processed: {processed_states}, Queue length: {len(priority_queue)}, Min heuristic in queue: {min_heuristic}")
+        if print_status:
+            if current_state.heuristic > min_heuristic:
+                min_heuristic = current_state.heuristic
+                print(f"Processed: {processed_states}, Queue length: {len(priority_queue)}, Min heuristic in queue: {min_heuristic}")
+            if processed_states % 10000 == 0:
+                print(f"Processed: {processed_states}, Queue length: {len(priority_queue)}, Min heuristic in queue: {min_heuristic}")
 
         # Save all optimal-steps states
         if current_state.is_complete():
-            print("Found first solution!")
+            if print_status:
+                print("Found first solution!")
             final_states.append(current_state)
             completed_steps = current_state.craft_count
             upper_bound = completed_steps
@@ -203,10 +249,8 @@ def optimize(
         # print("Queue length: ", len(priority_queue))
         # input()
 
-        # print(f"Current: {current_state}")
         next_state: AStarOptimizerState
         for next_state in current_state.crafts(recipe_list):
-            # print(f"Next: {next_state}")
             # Check if next state is already in priority queue? Probably not necessary
 
             # Check if next states exceeds upper bound (by existing recipe)
@@ -215,9 +259,10 @@ def optimize(
 
             # Check if the next state exceeds deviation limit
             # print(next_state.current, next_state.crafted, initial_crafts, next_state.get_deviations(initial_crafts))
-            deviations = next_state.get_deviations(initial_crafts)
-            if check_deviations and deviations > max_deviations:
-                continue
+            if check_deviations:
+                deviations = next_state.get_deviations(initial_crafts)
+                if deviations > max_deviations:
+                    continue
 
             # Check if the next state is already visited
             current_set = frozenset(next_state.current)
@@ -227,9 +272,11 @@ def optimize(
             visited[current_set] = next_state.craft_count
             heapq.heappush(priority_queue, (next_state.heuristic, next_state))
 
-    print(f"Complete! {completed_steps} crafts")
-    print(f"Found {len(final_states)} optimal recipes.")
+    if print_status:
+        print(f"Complete! {completed_steps} crafts")
+        print(f"Found {len(final_states)} optimal recipes.")
 
+    speedrun_recipes: list[SpeedrunRecipe] = []
     # Post-processing - make sure the ordering is correct
     for final_state in final_states:
         crafted = {0, 1, 2, 3}
@@ -244,19 +291,44 @@ def optimize(
                     steps_copy.remove((u, v, result))
                     new_steps.append((u, v, result))
 
+        cur_speedrun = []
         for u, v, result in new_steps:
-            print(
-                f"{recipe_list.get_name_capitalized(u)} + {recipe_list.get_name_capitalized(v)} -> {recipe_list.get_name_capitalized(result)}")
-        print("\n---------------------------------------------------\n")
+            ing1 = recipe_list.get_name_capitalized(u)
+            ing2 = recipe_list.get_name_capitalized(v)
+            res = recipe_list.get_name_capitalized(result)
+            is_target = result in target_ids
+            cur_speedrun.append((ing1, ing2, res, is_target))
 
-    print("Optimization complete!")
+        cur_speedrun_recipe = SpeedrunRecipe(cur_speedrun)
+        speedrun_recipes.append(cur_speedrun_recipe)
+        if print_status:
+            print(cur_speedrun_recipe.to_discord_asciidoc())
+            print("\n---------------------------------------------------\n")
 
-    return final_states
+    if print_status:
+        print("Optimization complete!")
+
+    return speedrun_recipes
 
 
 def main():
-    optimize("Firebird", savefile_to_optimizer_recipes("../yui_optimizer_savefile.json"), 12)
+    # optimize("Firebird", savefile_to_optimizer_recipes("../yui_optimizer_savefile.json"), 12, self_generate_heuristic=True)
     # optimize("1444980", savefile_to_optimizer_recipes("../yui_optimizer_savefile.json"), 128)
+    # TODO: Proper benchmarking, isolated from setup code
+    # Also TODO: Optimize this code. There's likely a very high constant factor here.
+    # with open("../a_star_benchmark_infinite_craft.json", "r") as f:
+    #     data = json.load(f)
+    # targets = data["targets"]
+    # upper_bound = data["upper_bound"]
+    # # initial_crafts = data["initial_crafts"]
+    # # max_deviations = data["deviation"]
+    # elements_raw = data["recipes"]["elements"]
+    # recipes_raw = data["recipes"]["recipes"]
+    # optimizer = OptimizerRecipeList([element['text'] for element in elements_raw])
+    # for result, recipe_list in recipes_raw.items():
+    #     for recipe in recipe_list:
+    #         optimizer.add_recipe_name(result, recipe[0]['text'], recipe[1]['text'])
+    # optimize(targets, optimizer, upper_bound)
     pass
 
 

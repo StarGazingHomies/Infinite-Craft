@@ -1,85 +1,167 @@
-import asyncio
-import json
-import os
-import sys
-import time
-import traceback
-import urllib
-from typing import Optional
-from urllib.parse import quote_plus
-from urllib.request import Request, urlopen
 import argparse
+import asyncio
+import os
+import re
+import sys
+from typing import Optional
 
 import aiohttp
 
 import recipe
+import util
 
-elements = ["Hydrogen", "Helium", "Lithium", "Beryllium", "Boron", "Carbon", "Nitrogen", "Oxygen", "Fluorine", "Neon",
-            "Sodium", "Magnesium", "Aluminium", "Silicon", "Phosphorus", "Sulfur", "Chlorine", "Argon", "Potassium",
-            "Calcium", "Scandium", "Titanium", "Vanadium", "Chromium", "Manganese", "Iron", "Cobalt", "Nickel",
-            "Copper", "Zinc", "Gallium", "Germanium", "Arsenic", "Selenium", "Bromine", "Krypton", "Rubidium",
-            "Strontium", "Yttrium", "Zirconium", "Niobium", "Molybdenum", "Technetium", "Ruthenium", "Rhodium",
-            "Palladium", "Silver", "Cadmium", "Indium", "Tin", "Antimony", "Tellurium", "Iodine", "Xenon", "Caesium",
-            "Barium", "Lanthanum", "Cerium", "Praseodymium", "Neodymium", "Promethium", "Samarium", "Europium",
-            "Gadolinium", "Terbium", "Dysprosium", "Holmium", "Erbium", "Thulium", "Ytterbium", "Lutetium",
-            "Hafnium", "Tantalum", "Tungsten", "Rhenium", "Osmium", "Iridium", "Platinum", "Gold", "Mercury",
-            "Thallium", "Lead", "Bismuth", "Polonium", "Astatine", "Radon", "Francium", "Radium", "Actinium",
-            "Thorium", "Protactinium", "Uranium", "Neptunium", "Plutonium", "Americium", "Curium", "Berkelium",
-            "Californium", "Einsteinium", "Fermium", "Mendelevium", "Nobelium", "Lawrencium", "Rutherfordium",
-            "Dubnium", "Seaborgium", "Bohrium", "Hassium", "Meitnerium", "Darmstadtium", "Roentgenium", "Copernicium",
-            "Nihonium", "Flerovium", "Moscovium", "Livermorium", "Tennessine", "Oganesson"]
+# elements = ["Hydrogen", "Helium", "Lithium", "Beryllium", "Boron", "Carbon", "Nitrogen", "Oxygen", "Fluorine", "Neon",
+#             "Sodium", "Magnesium", "Aluminium", "Silicon", "Phosphorus", "Sulfur", "Chlorine", "Argon", "Potassium",
+#             "Calcium", "Scandium", "Titanium", "Vanadium", "Chromium", "Manganese", "Iron", "Cobalt", "Nickel",
+#             "Copper", "Zinc", "Gallium", "Germanium", "Arsenic", "Selenium", "Bromine", "Krypton", "Rubidium",
+#             "Strontium", "Yttrium", "Zirconium", "Niobium", "Molybdenum", "Technetium", "Ruthenium", "Rhodium",
+#             "Palladium", "Silver", "Cadmium", "Indium", "Tin", "Antimony", "Tellurium", "Iodine", "Xenon", "Caesium",
+#             "Barium", "Lanthanum", "Cerium", "Praseodymium", "Neodymium", "Promethium", "Samarium", "Europium",
+#             "Gadolinium", "Terbium", "Dysprosium", "Holmium", "Erbium", "Thulium", "Ytterbium", "Lutetium",
+#             "Hafnium", "Tantalum", "Tungsten", "Rhenium", "Osmium", "Iridium", "Platinum", "Gold", "Mercury",
+#             "Thallium", "Lead", "Bismuth", "Polonium", "Astatine", "Radon", "Francium", "Radium", "Actinium",
+#             "Thorium", "Protactinium", "Uranium", "Neptunium", "Plutonium", "Americium", "Curium", "Berkelium",
+#             "Californium", "Einsteinium", "Fermium", "Mendelevium", "Nobelium", "Lawrencium", "Rutherfordium",
+#             "Dubnium", "Seaborgium", "Bohrium", "Hassium", "Meitnerium", "Darmstadtium", "Roentgenium", "Copernicium",
+#             "Nihonium", "Flerovium", "Moscovium", "Livermorium", "Tennessine", "Oganesson"]
 recipe_handler = None
 
 
-def parse_craft_file(filename: str, forced_delimiter: Optional[str] = None, *, ignore_case: bool = True, strict_order: bool = False) -> list[tuple[str, str, str]]:
-    with open(filename, 'r', encoding='utf-8') as file:
-        crafts = file.readlines()
+# Follows speedrun script guidelines
+# TODO: Use this class in all relevant functions
+class SpeedrunRecipe:
+    crafts: list[tuple[str, str, str, bool]] = []  # Format: [0] + [1] -> [2], [3] indicates if the result is a target
+    # TODO: Some way to represent line number comments
+    emotes: dict[str, str]  # Optional emotes storage. Unused for now.
+    craft_counts: dict[str, int] = {}  # Unused for now
 
-    # Format: ... + ... [delimiter] ...
-    craft_count = 0
-    crafts_parsed: list[tuple[str, str, str]] = []
-    for i, craft in enumerate(crafts):
-        # print(craft)
-        if craft == '\n':
-            continue
-        craft = craft.split(" //")[0].strip()
+    def __init__(self, crafts: list[tuple[str, str, str, bool]]):
+        self.crafts = crafts
 
-        # Automatic delimiter detection
-        delimiter = " = "
-        if forced_delimiter:
-            delimiter = forced_delimiter
-        else:
-            if " = " in craft:
-                pass
-            elif " -> " in craft:
-                delimiter = " -> "
+    def __str__(self):
+        return '\n'.join(
+            [f"{craft[0]}  +  {craft[1]}  =  {craft[2]}{'  // @result' if craft[3] else ''}" for craft in self.crafts])
+
+    __repr__ = __str__
+
+    def __getitem__(self, item):
+        return self.crafts[item]
+
+    def __iter__(self):
+        return iter(self.crafts)
+
+    def __len__(self):
+        return len(self.crafts)
+
+    @property
+    def results(self) -> list[str]:
+        return [craft[2] for craft in self.crafts]
+
+    @property
+    def targetList(self) -> list[str]:
+        return [craft[2] for craft in self.crafts if craft[3]]
+
+    def to_discord_message(self, default_language="prolog", highlight_language=None) -> str:
+        # Note on languages:
+        # Typescript - purple
+        # Prolog - orange
+        # Scala - funny
+        if not highlight_language:
+            if len(self.targetList) == 1:
+                highlight_language = "fix"
             else:
-                print(f"Delimiter not found in line {i + 1}")
-                continue
+                highlight_language = default_language
+        current_str = ""
+        last_lang = None
+        for craft in self.crafts:
+            cur_lang = highlight_language if craft[3] else default_language
+            if last_lang != cur_lang or last_lang == "fix":
+                if last_lang:
+                    current_str += "```"
+                current_str += f"```{cur_lang}\n"
+                last_lang = cur_lang
+            current_str += f"{craft[0]}  +  {craft[1]}  =  {craft[2]}{'  // @result' if craft[3] else ''}\n"
 
+        current_str += "```"
+        return current_str
+
+    def to_discord_asciidoc(self) -> str:
+        current_str = "```asciidoc\n"
+        for i, craft in enumerate(self.crafts):
+            current_str += f"{craft[0]}  +  {craft[1]}  =  {craft[2]}{'  // ' + str(i+1) + ' :: ' if craft[3] else ''}\n"
+        current_str += "```"
+        return current_str
+
+
+def parse_craft_file(filename: str) -> SpeedrunRecipe:
+    with open(filename, 'r', encoding='utf-8') as file:
+        text = file.read()
+
+    # Remove multiline comments
+    # Multi-line - ignored
+    # Note that comments have to start with either a newline or 2 spaces.
+    text = re.sub('(\\s{2}|\n)/\\*.*?\\*/', '', text, flags=re.DOTALL)
+
+    crafts: list[tuple[str, str, str, bool]] = []
+    target_count = 0
+    comment_warning = False
+
+    for i, line in enumerate(text.split('\n')):
         try:
-            ingredients, results = craft.split(delimiter)
-            ing1, ing2 = ingredients.split(' + ')
+            # Line comment
+            comment = re.search("(\\s{2}|^)//.*", line)
+            if comment:
+                line = line[:comment.start()]
+                comment = comment.group(0)
+            if not line.strip():
+                continue
+            # Target element indicated by two colons (::) within a comment
+            target = "::" in comment if comment else False
+            target_count += target
+
+            # Warning if you're using single spaced comments
+            if not comment_warning and "//" in line:
+                comment_warning = True
+                print(f"Warning: Double slashes found in line {i+1}: {line}. "
+                      f"If this is a comment, use double spaces instead.")
+
+            line = line.strip()
+            ingredients, result = line.split('  =  ')
+            ing1, ing2 = ingredients.split('  +  ')
+
+            if "  " in ing1:
+                ing1_emote, ing1 = ing1.split("  ")
+            else:
+                ing1_emote = ""
+
+            if "  " in ing2:
+                ing2_emote, ing2 = ing2.split("  ")
+            else:
+                ing2_emote = ""
+
+            if "  " in result:
+                result_emote, result = result.split("  ")
+            else:
+                result_emote = ""
+
+            crafts.append((ing1.strip(), ing2.strip(), result.strip(), target))
         except ValueError:
-            print(f"Delimiter not found in line {i + 1}: {craft}")
+            print(f"Delimiter not found in line {i+1}: {line}")
+            print(f"Note that you need to use DOUBLE spaces around + and =, since elements may contain single spaces.")
             continue
-        if strict_order:
-            if ing1 > ing2:
-                ing1, ing2 = ing2, ing1
-        ing1, ing2, results = ing1.strip(), ing2.strip(), results.strip()
-        if ignore_case:
-            ing1, ing2, results = ing1.lower(), ing2.lower(), results.lower()
-        crafts_parsed.append((ing1, ing2, results))
-        craft_count += 1
 
-    return crafts_parsed
+    if target_count == 0:
+        print("No target elements found in the recipe. Defaulting to last element as target.")
+        crafts[-1] = (crafts[-1][0], crafts[-1][1], crafts[-1][2], True)
+
+    return SpeedrunRecipe(crafts)
 
 
-def compare(original: str, new: str, *args, **kwargs):
-    crafts = parse_craft_file(original, *args, **kwargs)
-    crafts2 = parse_craft_file(new, *args, **kwargs)
-    elements = set([craft[2] for craft in crafts])
-    elements2 = set([craft[2] for craft in crafts2])
+def compare(original: SpeedrunRecipe, new: SpeedrunRecipe):
+    crafts = original.crafts
+    crafts2 = new.crafts
+    elements = set(original.results)
+    elements2 = set(new.results)
 
     # print(set([str(craft) for craft in crafts]))
     # print(set([str(craft) for craft in crafts2]))
@@ -119,8 +201,7 @@ def compare(original: str, new: str, *args, **kwargs):
     return
 
 
-def simple_check_script(filename: str, *args, **kwargs) -> tuple[bool, bool, bool]:
-    crafts = parse_craft_file(filename, *args, **kwargs)
+def simple_check_script(speedrun_recipe: SpeedrunRecipe) -> tuple[bool, bool, bool]:
     has_duplicates = False
     has_misplaced = False
     has_missing = False
@@ -132,8 +213,8 @@ def simple_check_script(filename: str, *args, **kwargs) -> tuple[bool, bool, boo
                "wind": 0}
     crafted = set()
     possible_misplaced = set()
-    for i, craft in enumerate(crafts):
-        ing1, ing2, result = craft
+    for i, craft in enumerate(speedrun_recipe.crafts):
+        ing1, ing2, result, is_target = craft
         ing1, ing2, result = ing1.lower(), ing2.lower(), result.lower()
 
         if ing1 not in current:
@@ -171,15 +252,15 @@ def simple_check_script(filename: str, *args, **kwargs) -> tuple[bool, bool, boo
     return has_duplicates, has_misplaced, has_missing
 
 
-def loop_check_script(filename, *args, **kwargs) -> bool:
-    crafts = parse_craft_file(filename, *args, **kwargs)
+def loop_check_script(speedrun_recipe: SpeedrunRecipe) -> bool:
+    crafts = speedrun_recipe.crafts
     cur_elements = {"earth", "fire", "water", "wind"}
     new_order = []
 
     while len(cur_elements) < len(crafts) + 4:
         has_changes = False
         for i, craft in enumerate(crafts):
-            ing1, ing2, result = craft
+            ing1, ing2, result, is_result = craft
             ing1, ing2, result = ing1.lower(), ing2.lower(), result.lower()
             if ing1 in cur_elements and ing2 in cur_elements and result not in cur_elements:
                 cur_elements.add(result)
@@ -198,28 +279,28 @@ def loop_check_script(filename, *args, **kwargs) -> bool:
     return True
 
 
-def static_check_script(filename: str, *args, **kwargs):
-    result = simple_check_script(filename, *args, **kwargs)
+def static_check_script(speedrun_recipe: SpeedrunRecipe):
+    result = simple_check_script(speedrun_recipe)
     if not result[0] and result[1] and not result[2]:
         print("Trying to correct for misplaced elements...")
-        loop_check_script(filename, *args, **kwargs)
+        loop_check_script(speedrun_recipe)
 
 
-async def dynamic_check_script(filename: str, *args, **kwargs) -> bool:
+async def dynamic_check_script(speedrun_recipe: SpeedrunRecipe) -> bool:
     global recipe_handler
     if recipe_handler is None:
         recipe_handler = recipe.RecipeHandler(("Water", "Fire", "Wind", "Earth"))
 
-    crafts = parse_craft_file(filename, *args, **kwargs)
+    crafts = speedrun_recipe.crafts
 
     # Format: ... + ... -> ...
     has_issues = False
     async with aiohttp.ClientSession() as session:
-        headers = recipe.load_json("headers.json")["default"]
+        headers = util.load_json("headers.json")["default"]
         async with session.get("https://neal.fun/infinite-craft/", headers=headers) as resp:
             pass
         for i, craft in enumerate(crafts):
-            ing1, ing2, result = craft
+            ing1, ing2, result, is_target = craft
             true_result = await recipe_handler.combine(session, ing1.strip(), ing2.strip())
 
             if true_result != result.strip():
@@ -231,50 +312,39 @@ async def dynamic_check_script(filename: str, *args, **kwargs) -> bool:
     return has_issues
 
 
-def count_uses(filename: str):
-    # ONLY USE THIS FOR A CORRECT FILE
-    with open(filename, 'r') as file:
-        crafts = file.readlines()
-
-    # Format: ... + ... -> ...
-    current = {"Earth": 0,
-               "Fire": 0,
-               "Water": 0,
-               "Wind": 0}
-    for i, craft in enumerate(crafts):
-        if craft == '\n':
-            continue
-        ingredients, results = craft.split(' -> ')
-        ing1, ing2 = ingredients.split(' + ')
-        current[ing1.strip()] += 1
-        current[ing2.strip()] += 1
-        current[results.strip()] = 0
-
-    print(current)
+def to_discord_message(speedrun_recipe: SpeedrunRecipe):
+    print(speedrun_recipe.to_discord_message())
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Speedrun Checker')
-    parser.add_argument('action', type=str, help='Action to perform', choices=['static_check', 'dynamic_check', 'compare'])
+    parser.add_argument('action', type=str, help='Action to perform',
+                        choices=['static_check', 'dynamic_check', 'compare', 'to_discord'])
     parser.add_argument('file', type=str, help='File to read from')
-    parser.add_argument('file2', type=str, help='File to compare to. Ignored unless using the compare action.', nargs='?', default=None)
-    parser.add_argument('--ignore_case', action='store_true', help='Ignore case when parsing the file')
-    parser.add_argument('--strict_order', action='store_true', help='Enforce strict order of ingredients')
+    parser.add_argument('file2', type=str, help='File to compare to. Ignored unless using the compare action.',
+                        nargs='?', default=None)
     return parser.parse_args()
 
 
 if __name__ == '__main__':
     pass
-    # combine_element_pairs()
     args = parse_args()
     if args.action == 'static_check':
-        static_check_script(args.file, ignore_case=args.ignore_case)
+        file = parse_craft_file(args.file)
+        static_check_script(file)
     elif args.action == 'dynamic_check':
         if os.name == 'nt':
             asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-        asyncio.run(dynamic_check_script(args.file, ignore_case=args.ignore_case))
+        file = parse_craft_file(args.file)
+        asyncio.run(dynamic_check_script(file))
     elif args.action == 'compare':
         if args.file2 is None:
             print("No file to compare to!")
             sys.exit(1)
-        compare(args.file, args.file2, ignore_case=args.ignore_case, strict_order=args.strict_order)
+        file1 = parse_craft_file(args.file)
+        file2 = parse_craft_file(args.file2)
+        compare(file1, file2)
+    elif args.action == 'to_discord':
+        file = parse_craft_file(args.file)
+        # to_discord_message(file)
+        print(file.to_discord_asciidoc())

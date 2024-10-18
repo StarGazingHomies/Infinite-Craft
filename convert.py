@@ -9,6 +9,7 @@ from typing import Optional
 import aiohttp
 import bidict
 
+import optimals
 import recipe
 import util
 
@@ -70,10 +71,10 @@ def modify_save_file(file: str, items_file: str, new_file: str):
         json.dump(new_data_2, f)
 
 
-def count_recipes(file: str):
-    with open(file, "r") as f:
-        recipes = json.load(f)
-    print(len(recipes))
+# def count_recipes(file: str):
+#     with open(file, "r") as f:
+#         recipes = json.load(f)
+#     print(len(recipes))
 
 
 def convert_to_result_first(file_name):
@@ -282,18 +283,6 @@ def merge_sql(file_new: str):
             print(f"Processed {num_recipes} recipes")
 
 
-def get_results_for(results: list[str]):
-    recipe_handler = recipe.RecipeHandler(("Water", "Fire", "Wind", "Earth"))
-    for result in results:
-        print(recipe_handler.get_local_results_for(result))
-
-
-def get_recipes_using(elements: list[str]):
-    recipe_handler = recipe.RecipeHandler(("Water", "Fire", "Wind", "Earth"))
-    for element in elements:
-        print(recipe_handler.get_local_results_using(element))
-
-
 @cache
 def limit(n: int) -> int:
     return n * (n + 1) // 2
@@ -480,24 +469,30 @@ def add_to_recipe_handler(items_file: str, recipes_file: str):
 
 def filter_results(result: str) -> bool:
     # 3 letter search
-    # if len(result) != 3:
-    #     return False
+    if len(result) != 1:
+        return False
     # for char in result.lower():
-    #     if not ord("a") <= ord(char) <= ord("z"):
-    #         return False
-
+    #     if not (ord("a") <= ord(char) <= ord("z") or ord("0") <= ord(char) <= ord("9") or char in (" ", "\t", "-", ".", "_", ",", ":", "’", "'", "/")):
+    #         return True
     return True
+    # return not " " in result
 
 
 def generate_single_best_recipe(input_file: str, output_file: str):
+    print("Loading file...")
     try:
         with open(input_file, "r", encoding="utf-8") as file:
             last_state_json = json.load(file)
         best_recipes = last_state_json["BestRecipes"]
     except FileNotFoundError:
-        best_recipes = {}
+        print("File not found")
+        return
+    except KeyError:
+        print("Invalid file")
+        return
+    print("File loading complete!")
 
-    MAX_DEPTH = 12
+    MAX_DEPTH = 16
     recipe_list = [[] for _ in range(MAX_DEPTH + 1)]
     for key, value in best_recipes.items():
         if len(value[0]) > MAX_DEPTH:
@@ -521,8 +516,8 @@ def generate_single_best_recipe(input_file: str, output_file: str):
                 # if key.lower() in visited:
                 #     continue
                 # visited.add(key.lower())
-                value_str = "\n".join([f"{x[0]} + {x[1]} -> {x[2]}" for x in value])
-                f.write(f"{count+1}: {key}:\n{value_str}\n\n")
+                value_str = "\n".join([f"{x[0]} + {x[1]} = {x[2]}" for x in value])
+                f.write(f"{count + 1}: {key}:\n{value_str}\n\n")
                 count += 1
     # with open(output_file, "w", encoding="utf-8") as f:
     #     for i in range(10):
@@ -533,6 +528,57 @@ def generate_single_best_recipe(input_file: str, output_file: str):
     #             #     continue
     #             # visited.add(key.lower())
     #             f.write(f"{key}\n")
+
+
+def generate_single_best_json(input_file: str, output_file: str):
+    print("Loading file...")
+    try:
+        with open(input_file, "r", encoding="utf-8") as file:
+            last_state_json = json.load(file)
+        best_recipes = last_state_json["BestRecipes"]
+    except FileNotFoundError:
+        print("File not found")
+        return
+    except KeyError:
+        print("Invalid file")
+        return
+    print("File loading complete!")
+
+    recipe_list = {}
+    for key, value in best_recipes.items():
+        recipe_list[key] = value[0]
+
+    with open(output_file, "w", encoding="utf-8") as f:
+        json.dump(recipe_list, f, ensure_ascii=False)
+
+
+def export_items(input_file: str, output_file: str):
+    print("Loading file...")
+    try:
+        with open(input_file, "r", encoding="utf-8") as file:
+            last_state_json = json.load(file)
+        best_recipes = last_state_json["BestRecipes"]
+    except FileNotFoundError:
+        print("File not found")
+        return
+    except KeyError:
+        print("Invalid file")
+        return
+
+    MAX_DEPTH = 12
+    items_list = [[] for _ in range(MAX_DEPTH + 1)]
+    for key, value in best_recipes.items():
+        if len(value[0]) > MAX_DEPTH:
+            break
+        if filter_results(key):
+            items_list[len(value[0])].append(key)
+
+    print("Items at each depth: ", [len(x) for x in items_list])
+
+    with open(output_file, "w", encoding="utf-8") as f:
+        for i in range(MAX_DEPTH + 1):
+            for key in items_list[i]:
+                f.write(f"{i}={key}=\n")
 
 
 def compare_persistent_files(file1: str, file2: str):
@@ -556,6 +602,21 @@ def compare_persistent_files(file1: str, file2: str):
 
     print("\n".join(missing))
     return
+
+
+def find_specific_items(file: str, items: list[str]):
+    with open(file, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    for item in items:
+        if item in data["BestRecipes"]:
+            print(f"{item}:\n")
+            result = data["BestRecipes"][item]
+            for r in result:
+                print("```asciidoc")
+                for a, b, c in r[:-1]:
+                    print(f"{a} + {b} -> {c}")
+                print(f"{r[-1][0]} + {r[-1][1]} -> {r[-1][2]}  // :: \n```\n")
+            print("--------------------------")
 
 
 def generate_json(input_file: str, output_file: str):
@@ -710,6 +771,194 @@ def merge_savefile(file1: str, file2: str, output_file: str):
         json.dump(new_data, f, ensure_ascii=False)
 
 
+def find_softlocks():
+    rh = recipe.RecipeHandler([])
+    items_cur = rh.db.cursor()
+    items_cur.execute("SELECT * FROM items")
+    softlock_data = {}
+    for i in items_cur:
+        softlock_data[i[2]] = [0, 0]
+
+    recipes_cur = rh.db.cursor()
+    recipes_cur.execute("""
+    SELECT ing1.name, ing2.name, result.name
+    FROM recipes
+    JOIN items   AS ing1   ON ing1.id = recipes.ingredient1_id
+    JOIN items   AS ing2   ON ing2.id = recipes.ingredient2_id
+    JOIN items   AS result ON result.id = recipes.result_id
+    """)
+    # recipes = {}
+    recipes_count = 0
+    for r in recipes_cur:
+        recipes_count += 1
+        if recipes_count % 100000 == 0:
+            print(f"Processed {recipes_count} recipes")
+        if r[0] in softlock_data:
+            softlock_data[r[0]][1] += 1
+        else:
+            softlock_data[r[0]] = [0, 1]
+        if r[2].lower() == r[0].lower():
+            softlock_data[r[0]][0] += 1
+
+        if r[1] in softlock_data:
+            softlock_data[r[1]][1] += 1
+        else:
+            softlock_data[r[1]] = [0, 1]
+        if r[2].lower() == r[1].lower():
+            softlock_data[r[1]][0] += 1
+
+    # print(nothing_data)
+    with open("softlock_data.json", "w", encoding="utf-8") as f:
+        json.dump(softlock_data, f, ensure_ascii=False)
+
+
+def analyze_softlocks(file: str, persistent_file: str, *, softlock_limit=0.95):
+    with open(file, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    with open(persistent_file, "r", encoding="utf-8") as f:
+        persistent_data = json.load(f)
+    items_in_depth_11 = persistent_data["Visited"]
+    print(len(items_in_depth_11))
+
+    items: list[tuple[str, int, int]] = []
+    for key, value in data.items():
+        if value[1] <= 50:
+            continue
+        if len(key) > util.WORD_COMBINE_CHAR_LIMIT:
+            continue
+        items.append((key, value[0], value[1]))
+    items.sort(key=lambda x: x[1] / x[2], reverse=True)
+    for item in items:
+        if item[1] <= item[2] * softlock_limit:
+            break
+
+        if item[0] in items_in_depth_11:
+            # if item[0] in items_in_depth_11:
+            print(f"{item[0]}: {item[1]} / {item[2]} ( {round(item[1] / item[2] * 100):.1f}% )")
+
+
+def poseidons(result: str):
+    rh = recipe.RecipeHandler([])
+    crafts = rh.get_crafts(result)
+    with open(f"{result.replace(" ", "_")}_crafts.txt", "w", encoding="utf-8") as f:
+        for craft in crafts:
+            f.write(f"{craft[0]}  +  {craft[1]}\n")
+
+
+def count_poseidons(result: str):
+    rh = recipe.RecipeHandler([])
+    crafts = rh.get_crafts(result)
+    ingredients = {}
+    for craft in crafts:
+        if craft[0] in ingredients:
+            ingredients[craft[0]] += 1
+        else:
+            ingredients[craft[0]] = 1
+        if craft[1] in ingredients:
+            ingredients[craft[1]] += 1
+        else:
+            ingredients[craft[1]] = 1
+
+    with open(f"{result.replace(" ", "_")}_poseidons.json", "w", encoding="utf-8") as f:
+        json.dump(ingredients, f, ensure_ascii=False)
+
+
+def process_poseidons(result: str, file: str):
+    with open(file, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    items = []
+    for key, value in data.items():
+        items.append((key, value))
+    items.sort(key=lambda x: x[1], reverse=True)
+
+    with open(f"{result.replace(" ", "_")}_poseidon_ingredients.txt", "w", encoding="utf-8") as f:
+        for item in items:
+            f.write(f"{item[0]}: {item[1]}\n")
+
+
+def count_ingredients():
+    rh = recipe.RecipeHandler([])
+    recipes_cur = rh.db.cursor()
+    recipes_cur.execute("""SELECT ing1.name, ing2.name, result.name FROM recipes
+    JOIN items AS ing1 ON ing1.id = recipes.ingredient1_id
+    JOIN items AS ing2 ON ing2.id = recipes.ingredient2_id
+    JOIN items AS result ON result.id = recipes.result_id""")
+    ingredients = {}
+    recipe_count = 0
+    for r in recipes_cur:
+        recipe_count += 1
+        if recipe_count % 100000 == 0:
+            print(f"Processed {recipe_count} recipes")
+        if r[0] in ingredients:
+            ingredients[r[0]] += 1
+        else:
+            ingredients[r[0]] = 1
+        if r[1] in ingredients:
+            ingredients[r[1]] += 1
+        else:
+            ingredients[r[1]] = 1
+
+    with open("occurrences.json", "w", encoding="utf-8") as f:
+        json.dump(ingredients, f, ensure_ascii=False)
+
+
+def process_poseidons_percentage(result: str, poseidon_file: str, occurrences_file: str):
+    with open(poseidon_file, "r", encoding="utf-8") as f:
+        poseidons = json.load(f)
+
+    with open(occurrences_file, "r", encoding="utf-8") as f:
+        occurrences = json.load(f)
+
+    items = []
+    for key, value in poseidons.items():
+        if key in occurrences:
+            items.append((key, value, occurrences[key]))
+    items.sort(key=lambda x: x[1] / x[2], reverse=True)
+
+    with open(f"{result.replace(" ", "_")}_poseidon_ingredients_percentage.txt", "w", encoding="utf-8") as f:
+        for item in items:
+            f.write(f"{item[0]:<30}: {item[1]:>5} / {item[2]:>5} ( {item[1] / item[2] * 100:.2f}% )\n")
+
+
+def count_recipes():
+    rh = recipe.RecipeHandler([])
+    recipes_cur = rh.db.cursor()
+    recipes_cur.execute("""SELECT ing1.name, ing2.name, result.name FROM recipes
+    JOIN items AS ing1 ON ing1.id = recipes.ingredient1_id
+    JOIN items AS ing2 ON ing2.id = recipes.ingredient2_id
+    JOIN items AS result ON result.id = recipes.result_id""")
+
+    result_count = {}
+    recipe_count = 0
+    for r in recipes_cur:
+        recipe_count += 1
+        if recipe_count % 100000 == 0:
+            print(f"Processed {recipe_count} recipes")
+        if r[2] in result_count:
+            result_count[r[2]] += 1
+        else:
+            result_count[r[2]] = 1
+
+    with open("result_count.json", "w", encoding="utf-8") as f:
+        json.dump(result_count, f, ensure_ascii=False)
+
+
+def analyze_recipes(file: str):
+    with open(file, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    items = []
+    for key, value in data.items():
+        if key == "Nothing" or key == "Nothing\t":
+            continue
+        items.append((key, value))
+    items.sort(key=lambda x: x[1], reverse=True)
+    for item in items[:51]:
+        print(f"{item[0]}: {item[1]}")
+
+
 def find_minus_claus():
     rh = recipe.RecipeHandler([])
     items_cur = rh.db.cursor()
@@ -773,7 +1022,7 @@ def analyze_minus_claus(file: str, persistent_file: str):
         if len(key) > util.WORD_COMBINE_CHAR_LIMIT:
             continue
         items.append((key, value[0], value[1]))
-    items.sort(key=lambda x: x[1]/x[2], reverse=True)
+    items.sort(key=lambda x: x[1] / x[2], reverse=True)
     for item in items:
         if item[1] <= item[2] * 0.99:
             break
@@ -793,76 +1042,169 @@ def analyze_minus_claus(file: str, persistent_file: str):
                     is_valid = False
                     break
         if not is_valid and item[0] in items_in_depth_11:
-        # if item[0] in items_in_depth_11:
+            # if item[0] in items_in_depth_11:
             print(f"{item[0]}: {item[1]} / {item[2]} ( {item[1] / item[2]} )")
 
 
-def make_ingredients_case_insensitive():
-    rh = recipe.RecipeHandler([])
+def analyze_tmp(file: str):
+    with open(file, "r", encoding="utf-8") as f:
+        lines = f.readlines()
 
-    recipes_cur = rh.db.cursor()
-    recipes_cur.execute("""
-    SELECT ing1.name, ing2.name, result.name
-    FROM recipes
-    JOIN items   AS ing1   ON ing1.id = recipes.ingredient1_id
-    JOIN items   AS ing2   ON ing2.id = recipes.ingredient2_id
-    JOIN items   AS result ON result.id = recipes.result_id
-    """)
-    recipes_count = 0
-    for r in recipes_cur:
-        recipes_count += 1
-        if recipes_count % 100000 == 0:
-            print(f"Processed {recipes_count} recipes")
-
-        ing1, ing2, result = r
-        # print(ing1, ing2, result)
-        ing1 = util.to_start_case(ing1)
-        ing2 = util.to_start_case(ing2)
-        # print(ing1, ing2, result)
-
-        rh.add_recipe(ing1, ing2, result)
+    items = [line.split('=')[:2] for line in lines]
+    item: str
+    for depth, item in items:
+        if item.isnumeric():
+            print(f"{depth} = {item}")
 
 
-def eeeing_binary_to_text(data: str):
-    print()
-    print(data)
-    for char in data.split(" "):
-        bits = 0
-        for c in char:
-            if c == "E":
-                bits = (bits << 1) | 1
-            elif c == "e":
-                bits = (bits << 1)
-        print(chr(bits), end="")
-    print()
+def count_FDs(file: str):
+    with open(file, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    rh = recipe.RecipeHandler([], db_location="Depth 12/recipes_depth12_h.db")
+
+    depth_count = [0 for _ in range(13)]
+    fd_count = [0 for _ in range(13)]
+    for line in lines:
+        depth = line.split('=')[0]
+        word = line.split('=')[1].strip()
+        result = rh.get_item(word)
+        if not result:
+            print(f"Could not find {word}")
+            continue
+        depth_count[int(depth)] += 1
+        if result[1] == 1:
+            fd_count[int(depth)] += 1
+            print(f"{depth} = {word} = {result}")
+
+    print(depth_count)
+    print(fd_count)
 
 
-def binary_to_eeeing(data: str):
-    for char in data:
-        num = ord(char)
-        for i in range(8):
-            if num & (1<<(7-i)):
-                print("E", end="")
-            else:
-                print("e", end="")
-            # num >>= 1
-        print(" ", end="")
-    print()
+def analyze_tokens(file: str):
+    with open(file, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    tokenizer = util.Tokenizer()
+    items = [line.split('=')[:2] for line in lines]
+    tokens_at_depth = [[0 for _ in range(21)] for _ in range(13)]
+    for depth, item in items:
+        tokens = tokenizer.tokenize(item)
+        tokens_at_depth[int(depth)][len(tokens) - 1] += 1
+        # print(f"{depth} -> {len(tokens)} {item}")
+
+    for i in range(13):
+        print(f"Depth {i}: {sum(tokens_at_depth[i])}")
+        print(tokens_at_depth[i])
+
+
+def analyze_tokens2():
+    tokens_at_depth = [
+        [0, 3, 6, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 9, 5, 4, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 19, 24, 4, 3, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 15, 61, 45, 6, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 35, 114, 85, 36, 4, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 70, 261, 168, 88, 31, 6, 3, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 132, 488, 506, 277, 103, 40, 14, 3, 1, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 178, 944, 1256, 861, 392, 159, 64, 16, 10, 4, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0],
+        [0, 257, 1883, 3011, 2740, 1534, 620, 285, 101, 44, 17, 12, 6, 2, 2, 1, 0, 0, 0, 0, 2],
+        [0, 301, 3484, 8350, 8899, 5808, 2783, 1228, 498, 239, 107, 51, 36, 8, 5, 3, 0, 0, 1, 2, 16],
+        [0, 350, 7259, 23013, 29791, 22216, 12591, 5963, 2762, 1283, 575, 314, 167, 90, 49, 40, 16, 13, 19, 8, 59],
+        [0, 200, 8298, 32391, 49590, 41253, 25765, 13632, 6687, 3208, 1711, 863, 481, 242, 153, 68, 45, 30, 24, 10,
+         139], ]
+
+    for i in range(12):
+        average_tokens = sum([j * tokens_at_depth[i][j] for j in range(21)]) / sum(tokens_at_depth[i])
+        print(f"Depth {i + 1}: {sum(tokens_at_depth[i])} {average_tokens}")
+
+
+def analyze_folder_save(persistent_file: str, results_folder: str = "Results",
+                        output_file: str = "4_letter_sequences.txt"):
+    with open(persistent_file, "r", encoding="utf-8") as f:
+        persistent_data = json.load(f)
+    items: dict[str, int] = persistent_data["BestDepths"]
+    path = os.path.join(os.getcwd(), results_folder)
+    # print(path)
+    count = 0
+    final_result = ""
+    for item, depth in items.items():
+        item_recipe_file = os.path.join(path, f"{depth}", f"{util.file_sanitize(item)}.txt")
+        # print(item_recipe_file)
+        if len(item) != 4 or not all([ord('a') <= ord(x) <= ord('z') for x in item.lower()]):
+            continue
+        count += 1
+        with open(item_recipe_file, "r", encoding='utf-8') as f:
+            final_result += f"{count}: " + f.read()
+
+    with open(output_file, "w") as fout:
+        fout.write(final_result)
+
+
+def analyze_optimal_save(output_file: str = "4_letter_sequences.txt"):
+    optimal_handler: Optional[optimals.OptimalRecipeStorage] = optimals.OptimalRecipeStorage()
+    count = 0
+    with open(output_file, "w") as fout:
+        pass
+    items: list[tuple[str, str]] = []
+    for item_id, item, best_recipes in optimal_handler.get_all_optimals():
+        best_recipes = best_recipes.split("==")[:-1]
+        first_recipe = best_recipes[0].split("=")
+        if len(item) != 4 or not all([ord('a') <= ord(x) <= ord('z') for x in item.lower()]):
+            continue
+        count += 1
+        # print(f"{item_id}: {item}:")
+        item_str = f"{item}:\n"
+        for i in range(0, len(first_recipe), 3):
+            item_str += f"{first_recipe[i]} + {first_recipe[i + 1]} = {first_recipe[i + 2]}\n"
+        items.append((item.lower(), item_str))
+    items.sort()
+    with open(output_file, "a") as fout:
+        for _, item_str in items:
+            fout.write(item_str)
+
+    print(count)
+
+
+async def new_api_test():
+    addr = util.load_json("headers.json")["addr"]
+    rh = recipe.RecipeHandler(util.DEFAULT_STARTING_ITEMS, request_addr=addr)
+    async with aiohttp.ClientSession() as s:
+        print(await rh.request_batch(s, [("Water", "Fire"), ("Water", "Water"), ("Fire", "Fire")]))
 
 
 if __name__ == '__main__':
     pass
+    asyncio.run(new_api_test())
+
+    # count_recipes()
+    # analyze_recipes("result_count.json")
+    # poseidons()
+    # count_ingredients()
+    # s = "Poseidon"
+    # count_poseidons(s)
+    # process_poseidons(s, f"{s.replace(" ", "_")}_poseidons.json")
+    # process_poseidons_percentage(s, f"{s.replace(" ", "_")}_poseidons.json", "occurrences.json")
+    # analyze_folder_save("persistent.json")
+    # analyze_optimal_save()
+    # merge_sql("Depth 12/recipes_depth12_k.db")
+    # analyze_tokens("depth12_h_results.txt")
+    # analyze_tokens2()
     # analyze_minus_claus("Searches/Minus Claus/minus_claus_data2.json",
     #                     "Depth 11/persistent_depth11_pass3.json")
-    merge_sql("Depth 11/recipes_depth11_pass3.db")
+    # merge_sql("Depth 11/recipes_depth11_pass3.db")
     # input()
-    # eeeing_binary_to_text(input())    # binary_to_eeeing("Yes, I most certainly have decoded the message. How have you been rom?")
-    # binary_to_eeeing("Nini rom, may Luna bless your dreams tonight")
     # make_ingredients_case_insensitive()
     # if os.name == 'nt':
     #     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     # asyncio.run(main())
-    # generate_single_best_recipe("Depth 11/persistent_depth11_pass3.json", "Depth 11/best_recipes_depth_11_pass3.txt")
+    # export_items("Depth 12/persistent_depth12_complete.json", "Depth 12/depth12_complete_results_1char.txt")
+    # generate_single_best_json("Depth 12/persistent_depth12_complete.json", "Depth 12/depth12_complete_single_best.json")
+
+    # targets = "Clefable, Dewgong, Doduo, Exeggutor, Hypno, Machoke, Onix, Victreebel, Weezing, Arbok, Dratini, Electrode, Horsea, Jynx, Machop, Magnemite, Paras, Hitmonchan, Krabby, Pinsir, Poliwhirl, Hitmonlee, Spearow, Fearow, Tangela, Electabuzz, Kabuto, Psyduck, Bellsprout, Chansey, Poliwag, Missingno"
+    # find_specific_items("Depth 12/persistent_depth12_complete.json", targets.split(", "))
+
+    # generate_single_best_recipe("Depth 12/persistent_depth12_complete.json", "Depth 12/depth12_complete_single_best.txt")
     # compare_persistent_files("Depth 11/persistent_depth11_pass3.json", "Depth 11/persistent_depth11_pass2.json")
     # l = [10, 29, 113, 414, 1642, 7823, 39295, 209682]
     # print("\n".join([f"{l[i-1]}, {ordered_total(0, 0, i)}" for i in range(1, 9)]))
