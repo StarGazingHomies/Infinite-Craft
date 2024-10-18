@@ -8,6 +8,7 @@ Maybe even alpha-beta pruning (using heuristic)?
 - Visualization (trees!)
 - Crafting Tree Location File Generation?
 - OptimizerRecipeList and RecipeHandler common interface
+- Queueing system for requests (instead of just locking)
 
 ## Version 1.5.3
 

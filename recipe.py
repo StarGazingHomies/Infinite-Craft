@@ -42,19 +42,20 @@ class RecipeHandler:
     db_location: str = "cache/recipes.db"
     closed: bool = False
 
+    request_addr: str = "https://neal.fun/api/infinite-craft/pair"
     last_request: float = 0
-    request_cooldown: float = 0.5                # 0.5s is safe for this API
+    request_cooldown: float = 0.5  # 0.5s is safe for this API
     request_lock: asyncio.Lock = asyncio.Lock()
     sleep_time: float = 1.0
     sleep_default: float = 1.0
     retry_exponent: float = 2.0
-    local_only: bool = True
-    trust_cache_nothing: bool = True             # Trust the local cache for "Nothing" results
-    trust_first_run_nothing: bool = False        # Save as "Nothing" in the first run
+    local_only: bool = False
+    trust_cache_nothing: bool = True  # Trust the local cache for "Nothing" results
+    trust_first_run_nothing: bool = False  # Save as "Nothing" in the first run
     local_nothing_indication: str = "Nothing\t"  # Indication of untrusted "Nothing" in the local cache
-    nothing_verification: int = 3                # Verify "Nothing" n times with the API
-    nothing_cooldown: float = 5.0                # Cooldown between "Nothing" verifications
-    connection_timeout: float = 10.0             # Connection timeout
+    nothing_verification: int = 3  # Verify "Nothing" n times with the API
+    nothing_cooldown: float = 5.0  # Cooldown between "Nothing" verifications
+    connection_timeout: float = 10.0  # Connection timeout
 
     print_new_recipes: bool = True
 
@@ -123,6 +124,9 @@ class RecipeHandler:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
 
+    def is_nothing(self, item: str) -> bool:
+        return item == "Nothing" or item == self.local_nothing_indication
+
     def add_item(self, item: str, emoji: str, first_discovery: bool = False):
         # print(f"Adding: {item} ({emoji})")
         cur = self.db.cursor()
@@ -180,6 +184,7 @@ class RecipeHandler:
                     "WHERE ing1.name = ? AND ing2.name = ?", (a, b))
 
     def save_response(self, a: str, b: str, response: dict):
+        # print(response)
         result = response['result']
         try:
             emoji = response['emoji']
@@ -299,6 +304,9 @@ class RecipeHandler:
         # print(f"Requesting {a} + {b}", flush=True)
         r = await self.request_pair(session, a, b)
 
+        if 'error' in r:
+            r = {"result": "Nothing", "emoji": "", "isNew": False}
+
         nothing_count = 1
         while (local_result != self.local_nothing_indication and  # "Nothing" in local cache is long, long ago
                r['result'] == "Nothing" and  # Still getting "Nothing" from the API
@@ -310,49 +318,108 @@ class RecipeHandler:
                 print("Re-requesting Nothing result...", flush=True)
 
             r = await self.request_pair(session, a, b)
-
+            if 'error' in r:
+                r = {"result": "Nothing", "emoji": "", "isNew": False}
             nothing_count += 1
 
         self.save_response(a, b, r)
         return r['result']
 
+    async def combine_batch(self, session: aiohttp.ClientSession, batch: list[tuple[str, str]]) -> \
+        list[tuple[str, str, Optional[str]]]:
+        # Query local cache
+        local_results = [self.get_local(a, b) for a, b in batch]
+        final_results = [(a, b, None) for a, b in batch]
+
+        if self.local_only:
+            final_results = [(a, b, "Nothing") for a, b in batch]
+            for i, r in enumerate(local_results):
+                if r is not None:
+                    final_results[i] = (batch[i][0], batch[i][1], r)
+
+            return final_results
+
+        need_request = []
+        for i, (a, b) in enumerate(batch):
+            if local_results[i] is None:
+                need_request.append((a, b))
+            else:
+                final_results[i] = (a, b, local_results[i])
+
+        if need_request:
+            r = await self.request_batch(session, need_request)
+            for i, result in enumerate(r):
+                a, b = need_request[i]
+                # print(a, b, result)
+                if 'error' in result:
+                    result = {"result": "Nothing", "emoji": "", "isNew": False}
+                else:
+                    self.save_response(a, b, result)
+                final_results[batch.index((a, b))] = (a, b, result['result'])
+
+        return final_results
+
+    async def request_batch(self, session: aiohttp.ClientSession, batch: list[tuple[str, str]]) -> list[dict]:
+        async with self.request_lock:
+            return await self._request_batch(session, batch)
+
     async def request_pair(self, session: aiohttp.ClientSession, a: str, b: str) -> dict:
         if len(a) > WORD_COMBINE_CHAR_LIMIT or len(b) > WORD_COMBINE_CHAR_LIMIT:
             return {"result": "Nothing", "emoji": "", "isNew": False}
         # with requestLock:
-        a_req = quote_plus(a)
-        b_req = quote_plus(b)
+        # a_req = quote_plus(a)
+        # b_req = quote_plus(b)
 
         # Don't request too quickly. Have been 429'd way too many times
         async with self.request_lock:
-            return await self._request_pair(session, a, b, a_req, b_req)
+            return await self._request_pair(session, a, b)
 
-    async def _request_pair(self, session: aiohttp.ClientSession, a: str, b: str, a_req: str, b_req: str) -> dict:
+    async def _request_pair(self, session: aiohttp.ClientSession, a: str, b: str) -> dict:
         t = time.perf_counter()
         if (t - self.last_request) < self.request_cooldown:
             time.sleep(self.request_cooldown - (t - self.last_request))
         self.last_request = time.perf_counter()
 
-        url = f"https://neal.fun/api/infinite-craft/pair?first={a_req}&second={b_req}"
+        data = f'[["{a}", "{b}"]]'
+        url = self.request_addr
+        # print(url, data)
 
         while True:
             try:
-                # print(url, type(url))
-                # cookies = session.cookie_jar.filter_cookies('https://neal.fun/infinite-craft/')
-                # for key, cookie in cookies.items():
-                #     print('Key: "%s", Value: "%s"' % (cookie.key, cookie.value))
-                async with session.get(url, headers=self.headers) as resp:
+                async with session.post(url, data=data) as resp:
+                    # print(resp.status)
+                    if resp.status == 200:
+                        self.sleep_time = self.sleep_default
+                        # Single request, so take 1st element of the batch
+                        return (await resp.json(content_type=None))[0]
+                    else:
+                        time.sleep(self.sleep_time)
+                        self.sleep_time *= self.retry_exponent
+                        print("Retrying...", flush=True)
+            except Exception as e:
+                # Handling more than just that one error
+                print("Unrecognized Error: ", e, file=sys.stderr)
+                traceback.print_exc()
+                time.sleep(self.sleep_time)
+                self.sleep_time *= self.retry_exponent
+                print("Retrying...", flush=True)
+
+    async def _request_batch(self, session, batch):
+        batch_str_list = [f'["{a}", "{b}"]' for a, b in batch]
+        batch_data = "[" + ",".join(batch_str_list) + "]"
+
+        url = self.request_addr
+
+        # print(url, batch_data)
+        while True:
+            try:
+                async with session.post(url, data=batch_data) as resp:
                     # print(resp.status)
                     if resp.status == 200:
                         self.sleep_time = self.sleep_default
                         return await resp.json(content_type=None)
                     else:
                         print(f"Request failed with status {resp.status}", file=sys.stderr)
-                        if resp.status == 500:
-                            print(f"Internal Server Error when combining {a} + {b}", file=sys.stderr)
-                            with open("500s.txt", "a", encoding="utf-8") as fout:
-                                fout.write(f"{a} + {b} -> 500\n")
-                            return {"result": "Nothing\t", "emoji": "", "isNew": False}
 
                         time.sleep(self.sleep_time)
                         self.sleep_time *= self.retry_exponent
@@ -375,7 +442,7 @@ async def random_walk(rh: RecipeHandler, session: aiohttp.ClientSession, steps: 
         result = await rh.combine(session, a, b)
         if result != "Nothing":
             current_items.add(result)
-        print(f"Step {i+1}: {a} + {b} -> {result}")
+        print(f"Step {i + 1}: {a} + {b} -> {result}")
     print(f"{len(current_items)} items: {current_items}")
 
 

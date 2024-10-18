@@ -69,9 +69,11 @@ persistent_file: str = "persistent.json"
 persistent_temporary_file: str = "persistent2.json"
 result_directory: str = "Results"
 
-recipe_handler: Optional[recipe.RecipeHandler] = recipe.RecipeHandler(init_state)
+persistent_config = util.load_json("config.json")
+
+recipe_handler: Optional[recipe.RecipeHandler] = recipe.RecipeHandler(init_state, **persistent_config)
 optimal_handler: Optional[optimals.OptimalRecipeStorage] = optimals.OptimalRecipeStorage()
-depth_limit = 26
+depth_limit = 3
 extra_depth = 0
 case_sensitive = True
 allow_starting_elements = True
@@ -157,7 +159,7 @@ class GameState:
         u, v = int_to_pair(i)
         craft_result = await recipe_handler.combine(session, self.items[u], self.items[v])
 
-        # Invalid crafts,
+        # Invalid crafts / no result
         if craft_result is None or craft_result == "Nothing":
             return None
 
@@ -228,9 +230,6 @@ def process_node(state: GameState):
         save_optimal_recipe(state)
 
 
-count_25 = 0
-
-
 # Depth limited search
 async def dls(session: aiohttp.ClientSession, state: GameState, depth: int) -> int:
     """
@@ -241,35 +240,18 @@ async def dls(session: aiohttp.ClientSession, state: GameState, depth: int) -> i
     :return: The number of states processed
     """
     global last_game_state, new_last_game_state
+
     # Resuming
     if last_game_state is not None and len(last_game_state) >= len(state) + depth and state < last_game_state:
         # print(f"Skipping state {state}")
         return 0
-
-    # Challenge conditions (Temporary)
-    # # Make sure no starting letter is the same
-    cur_first_letter = state.tail_item()[0]
-    if not (ord("A") <= ord(cur_first_letter) <= ord("Z")):
-        return 0
-    for i in range(4, len(state.items) - 1):
-        if state.items[i][0] == cur_first_letter:
-            # print(f"Skipping {state.items[i]}")
-            return 0
-
-    true_depth = 26 - depth
-    if true_depth >= 26:
-        print(true_depth, state)
-    elif true_depth >= 25:
-        global count_25
-        count_25 += 1
-        print(f"25: {count_25}\n{state}")
 
     if depth == 0:  # We've reached the end of the crafts, process the node
         new_last_game_state = state
         process_node(state)
         return 1
 
-    # 30 char limit, confirmed by Neal
+    # 30 char limit, according to PB and laurasia
     if len(state.tail_item()) > recipe.WORD_COMBINE_CHAR_LIMIT:
         return 0
 
@@ -278,34 +260,31 @@ async def dls(session: aiohttp.ClientSession, state: GameState, depth: int) -> i
         return 0
 
     count = 0  # States counter
-    # unused_items = state.unused_items()  # Unused items
-    # if len(unused_items) > depth + 1:  # Impossible to use all elements, since we have too few crafts left
-    #     return 0
-    # elif len(unused_items) > depth:  # We must start using unused elements NOW.
-    #     # TODO: 1st unused item must be used in this step, because of ordering
-    #     for j in range(len(unused_items)):  # For loop ordering is important. We want increasing pair_to_int order.
-    #         for i in range(j):  # i != j. We have to use two for unused_items to decrease.
-    #             child = await state.child(session, pair_to_int(unused_items[i], unused_items[j]))
-    #             if child is not None:
-    #                 count += await dls(session, child, depth - 1)
-    #     return count
-    # else:
-    lower_limit = 0
-    if depth == 1 and state.tail_index() != -1:  # Must use the 2nd last element, if it's not a default item.
-        lower_limit = limit(len(state) - 1)
+    unused_items = state.unused_items()  # Unused items
+    if len(unused_items) > depth + 1:  # Impossible to use all elements, since we have too few crafts left
+        return 0
+    elif len(unused_items) > depth:  # We must start using unused elements NOW.
+        for j in range(len(unused_items)):  # For loop ordering is important. We want increasing pair_to_int order.
+            for i in range(j):  # i != j. We have to use two for unused_items to decrease.
+                child = await state.child(session, pair_to_int(unused_items[i], unused_items[j]))
+                if child is not None:
+                    count += await dls(session, child, depth - 1)
+    else:
+        lower_limit = 0
+        if depth == 1 and state.tail_index() != -1:  # Must use the 2nd last element, if it's not a default item.
+            lower_limit = limit(len(state) - 1)
 
-    # for i in range(lower_limit, limit(len(state))):  # Regular ol' searching
-    for i in range(limit(len(state))-1, lower_limit-1, -1):  # Random order
-        child = await state.child(session, i)
-        if child is not None:
-            count += await dls(session, child, depth - 1)
+        for i in range(lower_limit, limit(len(state))):  # Regular ol' searching
+            child = await state.child(session, i)
+            if child is not None:
+                count += await dls(session, child, depth - 1)
 
     return count
 
 
 async def iterative_deepening_dfs(session: aiohttp.ClientSession):
 
-    curDepth = 26
+    curDepth = 1
     start_time = time.perf_counter()
     if last_game_state is not None:
         curDepth = len(last_game_state) - len(init_state)
@@ -340,15 +319,7 @@ async def main():
     else:
         optimal_handler.clear()
 
-    headers = util.load_json("headers.json")["default"]
     async with aiohttp.ClientSession() as session:
-        async with session.get("https://neal.fun/infinite-craft/", headers=headers) as resp:
-            print("Status:", resp.status)
-            print("Content-type:", resp.headers['content-type'])
-
-            cookies = session.cookie_jar.filter_cookies('https://neal.fun/infinite-craft/')
-            for key, cookie in cookies.items():
-                print('Key: "%s", Value: "%s"' % (cookie.key, cookie.value))
 
         await iterative_deepening_dfs(session)
 

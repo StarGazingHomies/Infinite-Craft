@@ -530,6 +530,28 @@ def generate_single_best_recipe(input_file: str, output_file: str):
     #             f.write(f"{key}\n")
 
 
+def generate_single_best_json(input_file: str, output_file: str):
+    print("Loading file...")
+    try:
+        with open(input_file, "r", encoding="utf-8") as file:
+            last_state_json = json.load(file)
+        best_recipes = last_state_json["BestRecipes"]
+    except FileNotFoundError:
+        print("File not found")
+        return
+    except KeyError:
+        print("Invalid file")
+        return
+    print("File loading complete!")
+
+    recipe_list = {}
+    for key, value in best_recipes.items():
+        recipe_list[key] = value[0]
+
+    with open(output_file, "w", encoding="utf-8") as f:
+        json.dump(recipe_list, f, ensure_ascii=False)
+
+
 def export_items(input_file: str, output_file: str):
     print("Loading file...")
     try:
@@ -790,7 +812,7 @@ def find_softlocks():
         json.dump(softlock_data, f, ensure_ascii=False)
 
 
-def analyze_softlocks(file: str, persistent_file: str, *, softlock_limit = 0.95):
+def analyze_softlocks(file: str, persistent_file: str, *, softlock_limit=0.95):
     with open(file, "r", encoding="utf-8") as f:
         data = json.load(f)
 
@@ -813,7 +835,7 @@ def analyze_softlocks(file: str, persistent_file: str, *, softlock_limit = 0.95)
 
         if item[0] in items_in_depth_11:
             # if item[0] in items_in_depth_11:
-            print(f"{item[0]}: {item[1]} / {item[2]} ( {round(item[1] / item[2]*100):.1f}% )")
+            print(f"{item[0]}: {item[1]} / {item[2]} ( {round(item[1] / item[2] * 100):.1f}% )")
 
 
 def poseidons(result: str):
@@ -897,7 +919,7 @@ def process_poseidons_percentage(result: str, poseidon_file: str, occurrences_fi
 
     with open(f"{result.replace(" ", "_")}_poseidon_ingredients_percentage.txt", "w", encoding="utf-8") as f:
         for item in items:
-            f.write(f"{item[0]:<30}: {item[1]:>5} / {item[2]:>5} ( {item[1] / item[2]*100:.2f}% )\n")
+            f.write(f"{item[0]:<30}: {item[1]:>5} / {item[2]:>5} ( {item[1] / item[2] * 100:.2f}% )\n")
 
 
 def count_recipes():
@@ -1068,7 +1090,7 @@ def analyze_tokens(file: str):
     tokens_at_depth = [[0 for _ in range(21)] for _ in range(13)]
     for depth, item in items:
         tokens = tokenizer.tokenize(item)
-        tokens_at_depth[int(depth)][len(tokens)-1] += 1
+        tokens_at_depth[int(depth)][len(tokens) - 1] += 1
         # print(f"{depth} -> {len(tokens)} {item}")
 
     for i in range(13):
@@ -1089,14 +1111,16 @@ def analyze_tokens2():
         [0, 257, 1883, 3011, 2740, 1534, 620, 285, 101, 44, 17, 12, 6, 2, 2, 1, 0, 0, 0, 0, 2],
         [0, 301, 3484, 8350, 8899, 5808, 2783, 1228, 498, 239, 107, 51, 36, 8, 5, 3, 0, 0, 1, 2, 16],
         [0, 350, 7259, 23013, 29791, 22216, 12591, 5963, 2762, 1283, 575, 314, 167, 90, 49, 40, 16, 13, 19, 8, 59],
-        [0, 200, 8298, 32391, 49590, 41253, 25765, 13632, 6687, 3208, 1711, 863, 481, 242, 153, 68, 45, 30, 24, 10, 139],]
+        [0, 200, 8298, 32391, 49590, 41253, 25765, 13632, 6687, 3208, 1711, 863, 481, 242, 153, 68, 45, 30, 24, 10,
+         139], ]
 
     for i in range(12):
         average_tokens = sum([j * tokens_at_depth[i][j] for j in range(21)]) / sum(tokens_at_depth[i])
-        print(f"Depth {i+1}: {sum(tokens_at_depth[i])} {average_tokens}")
+        print(f"Depth {i + 1}: {sum(tokens_at_depth[i])} {average_tokens}")
 
 
-def analyze_folder_save(persistent_file: str, results_folder: str = "Results", output_file: str = "4_letter_sequences.txt"):
+def analyze_folder_save(persistent_file: str, results_folder: str = "Results",
+                        output_file: str = "4_letter_sequences.txt"):
     with open(persistent_file, "r", encoding="utf-8") as f:
         persistent_data = json.load(f)
     items: dict[str, int] = persistent_data["BestDepths"]
@@ -1132,7 +1156,7 @@ def analyze_optimal_save(output_file: str = "4_letter_sequences.txt"):
         # print(f"{item_id}: {item}:")
         item_str = f"{item}:\n"
         for i in range(0, len(first_recipe), 3):
-            item_str += f"{first_recipe[i]} + {first_recipe[i+1]} = {first_recipe[i+2]}\n"
+            item_str += f"{first_recipe[i]} + {first_recipe[i + 1]} = {first_recipe[i + 2]}\n"
         items.append((item.lower(), item_str))
     items.sort()
     with open(output_file, "a") as fout:
@@ -1142,13 +1166,22 @@ def analyze_optimal_save(output_file: str = "4_letter_sequences.txt"):
     print(count)
 
 
+async def new_api_test():
+    addr = util.load_json("headers.json")["addr"]
+    rh = recipe.RecipeHandler(util.DEFAULT_STARTING_ITEMS, request_addr=addr)
+    async with aiohttp.ClientSession() as s:
+        print(await rh.request_batch(s, [("Water", "Fire"), ("Water", "Water"), ("Fire", "Fire")]))
+
+
 if __name__ == '__main__':
     pass
+    asyncio.run(new_api_test())
+
     # count_recipes()
     # analyze_recipes("result_count.json")
     # poseidons()
     # count_ingredients()
-    s = "Poseidon"
+    # s = "Poseidon"
     # count_poseidons(s)
     # process_poseidons(s, f"{s.replace(" ", "_")}_poseidons.json")
     # process_poseidons_percentage(s, f"{s.replace(" ", "_")}_poseidons.json", "occurrences.json")
@@ -1166,6 +1199,7 @@ if __name__ == '__main__':
     #     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     # asyncio.run(main())
     # export_items("Depth 12/persistent_depth12_complete.json", "Depth 12/depth12_complete_results_1char.txt")
+    # generate_single_best_json("Depth 12/persistent_depth12_complete.json", "Depth 12/depth12_complete_single_best.json")
 
     # targets = "Clefable, Dewgong, Doduo, Exeggutor, Hypno, Machoke, Onix, Victreebel, Weezing, Arbok, Dratini, Electrode, Horsea, Jynx, Machop, Magnemite, Paras, Hitmonchan, Krabby, Pinsir, Poliwhirl, Hitmonlee, Spearow, Fearow, Tangela, Electabuzz, Kabuto, Psyduck, Bellsprout, Chansey, Poliwag, Missingno"
     # find_specific_items("Depth 12/persistent_depth12_complete.json", targets.split(", "))

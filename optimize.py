@@ -1,6 +1,6 @@
 # Speedrun Optimizer
 import json
-import os
+import os, sys
 import asyncio
 import argparse
 import time
@@ -14,6 +14,7 @@ import speedrun
 import util
 import optimizers.a_star as a_star
 import optimizers.simple_generational as simple_generational
+from optimizers import addition_deletion
 from optimizers.optimizer_interface import OptimizerRecipeList, optimizer_recipes_to_dict, optimizer_recipes_from_dict
 
 
@@ -27,11 +28,32 @@ async def request_extra_generation(session: aiohttp.ClientSession, rh: recipe.Re
     new_items = set()
 
     tasks = []
+    cur_requests = []
+    results = []
     for i, item1 in enumerate(current):
         for item2 in current[i:]:
-            tasks.append(rh.combine(session, item1, item2))
+            local_result = rh.get_local(item1, item2)
+            # print(f"Local: {item1} + {item2} = {local_result}")
+            if local_result and local_result != "Nothing" and local_result not in current:
+                results.append(local_result)
+                continue
 
-    results = await asyncio.gather(*tasks)
+            cur_requests.append((item1, item2))
+            if len(cur_requests) >= 50:
+                tasks.append(rh.combine_batch(session, cur_requests))
+                cur_requests = []
+
+    if cur_requests:
+        tasks.append(rh.combine_batch(session, cur_requests))
+
+    batch_results = await asyncio.gather(*tasks)
+
+    for batch_result in batch_results:
+        # print(batch_result)
+        for item1, item2, new_item in batch_result:
+            if new_item and new_item != "Nothing" and new_item not in current:
+                results.append(new_item)
+
     for new_item in results:
         if new_item and new_item != "Nothing" and new_item not in current:
             new_items.add(new_item)
@@ -53,33 +75,52 @@ async def get_all_recipes(session: aiohttp.ClientSession, rh: recipe.RecipeHandl
     total_recipe_count = len(items) * (len(items) + 1) // 2
     completed_count = 0
 
-    # Request wrapper
-    async def combine_wrapper(item1, item2):
+    def progress_addn(n: int = 1):
         nonlocal completed_count
-        result = await rh.combine(session, item1, item2)
         completed_count += 1
         cur_precentage = int(completed_count / total_recipe_count * 100)
         last_precentage = int((completed_count - 1) / total_recipe_count * 100)
         if cur_precentage != last_precentage:
-            print(f"Recipe Progress: {cur_precentage}% ({completed_count}/{total_recipe_count}) \n"
-                  f"Estimated time remaining: {(total_recipe_count - completed_count) * 0.5:.1f}s")
-        return item1, item2, result
+            print(f"Recipe Progress: {cur_precentage}% ({completed_count}/{total_recipe_count})")
 
-    # Only store valid recipes
-    recipes = []
+    async def batch_combine(session: aiohttp.ClientSession, batch: list[tuple[str, str]]):
+        result = await rh.combine_batch(session, cur_requests)
+        progress_addn(len(batch))
+        return result
+
+    results = []
     items_set = set([item.lower() for item in items])
+    cur_requests = []
     tasks = []
-    for u, item1 in enumerate(items):
-        for item2 in items[u:]:
-            tasks.append(combine_wrapper(item1, item2))
 
-    results = await asyncio.gather(*tasks)
+    for i, item1 in enumerate(items):
+        for item2 in items[i:]:
+            local_result = rh.get_local(item1, item2)
+            # print(f"Local: {item1} + {item2} = {local_result}")
+            if local_result and local_result != "Nothing":
+                results.append((item1, item2, local_result))
+                progress_addn()
+                continue
 
-    for item1, item2, new_item in results:
-        if new_item.lower() in items_set:
-            recipes.append((item1, item2, new_item))
+            cur_requests.append((item1, item2))
+            if len(cur_requests) >= 50:
+                tasks.append(batch_combine(session, cur_requests.copy()))
+                cur_requests = []
 
-    return recipes
+    if cur_requests:
+        tasks.append(batch_combine(session, cur_requests.copy()))
+
+    print("Local recipe query complete")
+    print(f"Total: {len(tasks)} batches")
+
+    batch_results = await asyncio.gather(*tasks)
+
+    for batch_result in batch_results:
+        for item1, item2, new_item in batch_result:
+            if new_item and new_item != "Nothing":
+                results.append((item1, item2, new_item))
+
+    return results
 
 
 def get_all_local_recipes(rh: recipe.RecipeHandler, items: list[str]):
@@ -147,32 +188,16 @@ async def main(*,
     final_items_for_current_recipe = list(util.DEFAULT_STARTING_ITEMS) + craft_results
 
     # Request and build items cache
-    headers = util.load_json("headers.json")["default"]
-    with recipe.RecipeHandler(final_items_for_current_recipe, local_only=local_only) as rh:
+    config = util.load_json("config.json")
+
+    with recipe.RecipeHandler(final_items_for_current_recipe, local_only=local_only, **config) as rh:
         async with aiohttp.ClientSession() as session:
-            url = yarl.URL("https://neal.fun/infinite-craft/")
-            cookies = util.load_json("cookies.json")
-            for key, value in cookies.items():
-                session.cookie_jar.update_cookies({key: value}, url)
-            # async with session.get("https://neal.fun/infinite-craft/", headers=headers) as resp:
-            #     print("Status:", resp.status)
-            #     print("Content-type:", resp.headers['content-type'])
-            #     print("Body:", await resp.text())
-            #
-            #     cookies = session.cookie_jar.filter_cookies(url)
-            #     for key, cookie in cookies.items():
-            #         print('Key: "%s", Value: "%s"' % (cookie.key, cookie.value))
             optimizer_recipes = await initialize_optimizer(
                 session,
                 rh,
                 final_items_for_current_recipe,
                 extra_generations,
                 local_generations)
-            cookie_json = {}
-            for key, cookie in cookies.items():
-                cookie_json[key] = cookie.value
-            util.save_json("cookies.json", cookie_json)
-    return
 
     # Generate generations
     optimizer_recipes.generate_generations()
@@ -181,10 +206,10 @@ async def main(*,
     initial_crafts = [optimizer_recipes.get_id(item) for item in list(util.DEFAULT_STARTING_ITEMS) + craft_results]
 
     # Artificial targets, when args just don't cut it because there's too many
-    alphabets = [chr(i) for i in range(ord('a'), ord('z') + 1)]
-    target = []
-    for c in alphabets:
-        target.append(c)
+    # alphabets = [chr(i) for i in range(ord('a'), ord('z') + 1)]
+    # target = []
+    # for c in alphabets:
+    #     target.append(c)
     #     target.append(f".{c}")
     #     target.append(f"\"{c}\"")
     # print(target)
@@ -206,8 +231,9 @@ async def main(*,
     # }
     # with open("optimizer_setup.json", "w", encoding="utf-8") as f:
     #     json.dump(optimizer_setup, f, indent=4, ensure_ascii=False)
+    # result = addition_deletion.optimize(target, optimizer_recipes, max_crafts, initial_crafts, deviation)
     result = a_star.optimize(target, optimizer_recipes, max_crafts, initial_crafts, deviation)
-
+    
     # End timer
     end_time = time.perf_counter()
     print(f"Time taken: {end_time - start_time:.3f}s")
