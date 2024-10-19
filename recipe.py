@@ -50,13 +50,19 @@ class RecipeHandler:
     sleep_default: float = 1.0
     retry_exponent: float = 2.0
     local_only: bool = False
-    trust_cache_nothing: bool = True  # Trust the local cache for "Nothing" results
+    trust_cache_nothing: bool = False  # Trust the local cache for "Nothing" results
     trust_first_run_nothing: bool = False  # Save as "Nothing" in the first run
     local_nothing_indication: str = "Nothing\t"  # Indication of untrusted "Nothing" in the local cache
     nothing_verification: int = 3  # Verify "Nothing" n times with the API
+    batch_nothing_verification: int = 3  # Verify "Nothing" n times with the API while doing batch requests
     nothing_cooldown: float = 5.0  # Cooldown between "Nothing" verifications
     connection_timeout: float = 10.0  # Connection timeout
     batch_limit: int = 50  # Maximum number of requests in a batch
+
+    # Auto-commit settings
+    auto_commit: bool = True
+    auto_commit_interval: int = 1000  # Commit every 1000 requests
+    current_response_count: int = 0
 
     print_new_recipes: bool = True
 
@@ -185,6 +191,7 @@ class RecipeHandler:
                     "WHERE ing1.name = ? AND ing2.name = ?", (a, b))
 
     def save_response(self, a: str, b: str, response: dict):
+        self.current_response_count += 1
         # print(response)
         result = response['result']
         try:
@@ -205,12 +212,17 @@ class RecipeHandler:
         self.add_item(result, emoji, new)
 
         # Save as the fake nothing if it's the first run
-        # if result == "Nothing" and self.result_key(a, b) not in self.recipes_cache and not self.trust_first_run_nothing:
-        #     result = self.local_nothing_indication
-        #     result_id = self.items_id[result]
+        if result == "Nothing" and self.get_local(a, b) and not self.trust_first_run_nothing:
+            result = self.local_nothing_indication
 
         # Recipe: A + B --> C
         self.add_recipe(a, b, result)
+
+        # Autosave check
+        if self.auto_commit and self.current_response_count >= self.auto_commit_interval:
+            print("Auto committing recipes...", flush=True)
+            self.db.commit()
+            self.current_response_count = 0
 
     def get_local(self, a: str, b: str) -> Optional[str]:
         a = util.to_start_case(a)
@@ -326,40 +338,67 @@ class RecipeHandler:
         self.save_response(a, b, r)
         return r['result']
 
-    async def combine_batch(self, session: aiohttp.ClientSession, batch: list[tuple[str, str]]) -> \
+    async def combine_batch(self, session: aiohttp.ClientSession, batch: list[tuple[str, str]], *,
+                            check_local: bool = True) -> \
             list[tuple[str, str, Optional[str]]]:
-        # Query local cache
-        local_results = [self.get_local(a, b) for a, b in batch]
         final_results = [(a, b, None) for a, b in batch]
-
-        if self.local_only:
-            final_results = [(a, b, "Nothing") for a, b in batch]
-            for i, r in enumerate(local_results):
-                if r is not None:
-                    final_results[i] = (batch[i][0], batch[i][1], r)
-
-            return final_results
-
         need_request = []
+        request_mistake_counts = [0] * len(batch)
+        batch_id = {}
         for i, (a, b) in enumerate(batch):
-            if local_results[i] is None:
-                need_request.append((a, b))
-            else:
-                final_results[i] = (a, b, local_results[i])
+            batch_id[(a, b)] = i
 
+        # Query local cache
+        if check_local:
+            local_results = [self.get_local(a, b) for a, b in batch]
+
+            if self.local_only:
+                final_results = [(a, b, "Nothing") for a, b in batch]
+                for i, r in enumerate(local_results):
+                    if r is not None and r != self.local_nothing_indication:
+                        final_results[i] = (batch[i][0], batch[i][1], r)
+
+                return final_results
+
+            for i, (a, b) in enumerate(batch):
+                if local_results[i] is None or local_results[i] == self.local_nothing_indication:
+                    need_request.append((a, b))
+                elif not self.trust_cache_nothing and local_results[i] == "Nothing":
+                    need_request.append((a, b))
+                else:
+                    final_results[i] = (a, b, local_results[i])
+        else:
+            need_request = batch
+
+        # Requesting
         if need_request:
-            for i in range(0, len(need_request), self.batch_limit):
+            # print(f"Requesting {len(need_request)} items...", flush=True)
+            # TODO: Nothing protection, re-requesting
+            i = 0
+            while i < len(need_request):
+                # Yes, I'm modifying the list while in a loop
+                # what about it? >:3
                 current_batch = need_request[i:i + self.batch_limit]
                 r = await self.request_batch(session, current_batch)
                 for i, result in enumerate(r):
                     a, b = current_batch[i]
                     # print(a, b, result)
-                    if 'error' in result:
-                        result = {"result": "Nothing", "emoji": "", "isNew": False}
-                        # Log the error?
+                    if 'error' in result or result['result'] == "Nothing":
+                        if 'error' in result:
+                            print(f"Error {result['error']} in batch request: {a} + {b}", file=sys.stderr)
+                        else:
+                            print(f"Nothing result in batch request: {a} + {b}", flush=True)
+
+                        request_mistake_counts[batch_id[(a, b)]] += 1
+                        if request_mistake_counts[batch_id[(a, b)]] < self.batch_nothing_verification:
+                            need_request.append((a, b))
+                            continue
+                        else:
+                            result = {"result": "Nothing", "emoji": "", "isNew": False}
                     else:
                         self.save_response(a, b, result)
-                    final_results[batch.index((a, b))] = (a, b, result['result'])
+                    final_results[batch_id[(a, b)]] = (a, b, result['result'])
+                i += self.batch_limit
 
         return final_results
 

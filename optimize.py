@@ -24,7 +24,23 @@ from optimizers.optimizer_interface import OptimizerRecipeList, optimizer_recipe
 # The interface is implemented in `optimizer_interface.py`
 
 
-async def request_extra_generation(session: aiohttp.ClientSession, rh: recipe.RecipeHandler, current: list[str]):
+async def get_all_recipes(session: aiohttp.ClientSession, rh: recipe.RecipeHandler, current: list[str]):
+    total_recipe_count = len(current) * (len(current) + 1) // 2
+    completed_count = 0
+
+    def progress_addn(n: int = 1):
+        nonlocal completed_count
+        completed_count += n
+        cur_precentage = int(completed_count / total_recipe_count * 100)
+        last_precentage = int((completed_count - n) / total_recipe_count * 100)
+        if cur_precentage != last_precentage:
+            print(f"Recipe Progress: {cur_precentage}% ({completed_count}/{total_recipe_count})")
+
+    async def batch_combine(session: aiohttp.ClientSession, batch: list[tuple[str, str]]):
+        result = await rh.combine_batch(session, batch, check_local=False)
+        progress_addn(len(batch))
+        return result
+
     new_items = set()
 
     tasks = []
@@ -33,20 +49,36 @@ async def request_extra_generation(session: aiohttp.ClientSession, rh: recipe.Re
     for i, item1 in enumerate(current):
         for item2 in current[i:]:
             local_result = rh.get_local(item1, item2)
-            # print(f"Local: {item1} + {item2} = {local_result}")
-            if local_result and local_result != "Nothing" and local_result not in current:
+            print(f"Local: {item1} + {item2} = {local_result}")
+            if local_result and local_result != rh.local_nothing_indication and local_result not in current:
                 results.append(local_result)
+                progress_addn()
                 continue
 
             cur_requests.append((item1, item2))
             if len(cur_requests) >= 50:
-                tasks.append(rh.combine_batch(session, cur_requests))
+                tasks.append(batch_combine(session, cur_requests.copy()))
                 cur_requests = []
 
     if cur_requests:
-        tasks.append(rh.combine_batch(session, cur_requests))
+        tasks.append(batch_combine(session, cur_requests))
 
     batch_results = await asyncio.gather(*tasks)
+
+    for batch_result in batch_results:
+        # print(batch_result)
+        for item1, item2, new_item in batch_result:
+            if new_item and new_item != "Nothing" and new_item not in current:
+                results.append(new_item)
+
+    print(f"Total recipes: {len(results)}")
+    return results
+
+
+async def request_extra_generation(session: aiohttp.ClientSession, rh: recipe.RecipeHandler, current: list[str]):
+    batch_results = await get_all_recipes(session, rh, current)
+    results = []
+    new_items = set()
 
     for batch_result in batch_results:
         # print(batch_result)
@@ -69,58 +101,6 @@ def get_local_generation(rh: recipe.RecipeHandler, current: list[str]):
             if new_item and new_item != "Nothing" and new_item not in current:
                 new_items.add(new_item)
     return new_items
-
-
-async def get_all_recipes(session: aiohttp.ClientSession, rh: recipe.RecipeHandler, items: list[str]):
-    total_recipe_count = len(items) * (len(items) + 1) // 2
-    completed_count = 0
-
-    def progress_addn(n: int = 1):
-        nonlocal completed_count
-        completed_count += 1
-        cur_precentage = int(completed_count / total_recipe_count * 100)
-        last_precentage = int((completed_count - 1) / total_recipe_count * 100)
-        if cur_precentage != last_precentage:
-            print(f"Recipe Progress: {cur_precentage}% ({completed_count}/{total_recipe_count})")
-
-    async def batch_combine(session: aiohttp.ClientSession, batch: list[tuple[str, str]]):
-        result = await rh.combine_batch(session, cur_requests)
-        progress_addn(len(batch))
-        return result
-
-    results = []
-    items_set = set([item.lower() for item in items])
-    cur_requests = []
-    tasks = []
-
-    for i, item1 in enumerate(items):
-        for item2 in items[i:]:
-            local_result = rh.get_local(item1, item2)
-            # print(f"Local: {item1} + {item2} = {local_result}")
-            if local_result and local_result != "Nothing":
-                results.append((item1, item2, local_result))
-                progress_addn()
-                continue
-
-            cur_requests.append((item1, item2))
-            if len(cur_requests) >= 50:
-                tasks.append(batch_combine(session, cur_requests.copy()))
-                cur_requests = []
-
-    if cur_requests:
-        tasks.append(batch_combine(session, cur_requests.copy()))
-
-    print("Local recipe query complete")
-    print(f"Total: {len(tasks)} batches")
-
-    batch_results = await asyncio.gather(*tasks)
-
-    for batch_result in batch_results:
-        for item1, item2, new_item in batch_result:
-            if new_item and new_item != "Nothing":
-                results.append((item1, item2, new_item))
-
-    return results
 
 
 def get_all_local_recipes(rh: recipe.RecipeHandler, items: list[str]):
