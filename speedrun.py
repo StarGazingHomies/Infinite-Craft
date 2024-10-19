@@ -289,16 +289,14 @@ def static_check_script(speedrun_recipe: SpeedrunRecipe):
 async def dynamic_check_script(speedrun_recipe: SpeedrunRecipe) -> bool:
     global recipe_handler
     if recipe_handler is None:
-        recipe_handler = recipe.RecipeHandler(("Water", "Fire", "Wind", "Earth"))
+        config = util.load_json("config.json")
+        recipe_handler = recipe.RecipeHandler(("Water", "Fire", "Wind", "Earth"), **config)
 
     crafts = speedrun_recipe.crafts
 
     # Format: ... + ... -> ...
     has_issues = False
     async with aiohttp.ClientSession() as session:
-        headers = util.load_json("headers.json")["default"]
-        async with session.get("https://neal.fun/infinite-craft/", headers=headers) as resp:
-            pass
         for i, craft in enumerate(crafts):
             ing1, ing2, result, is_target = craft
             true_result = await recipe_handler.combine(session, ing1.strip(), ing2.strip())
