@@ -24,7 +24,7 @@ from optimizers.optimizer_interface import OptimizerRecipeList, optimizer_recipe
 # The interface is implemented in `optimizer_interface.py`
 
 
-async def get_all_recipes(session: aiohttp.ClientSession, rh: recipe.RecipeHandler, current: list[str]):
+async def _get_all_recipes(session: aiohttp.ClientSession, rh: recipe.RecipeHandler, current: list[str]):
     total_recipe_count = len(current) * (len(current) + 1) // 2
     completed_count = 0
 
@@ -41,8 +41,6 @@ async def get_all_recipes(session: aiohttp.ClientSession, rh: recipe.RecipeHandl
         progress_addn(len(batch))
         return result
 
-    new_items = set()
-
     tasks = []
     cur_requests = []
     results = []
@@ -51,7 +49,7 @@ async def get_all_recipes(session: aiohttp.ClientSession, rh: recipe.RecipeHandl
             local_result = rh.get_local(item1, item2)
             print(f"Local: {item1} + {item2} = {local_result}")
             if local_result and local_result != rh.local_nothing_indication and local_result not in current:
-                results.append(local_result)
+                results.append((item1, item2, local_result))
                 progress_addn()
                 continue
 
@@ -66,27 +64,28 @@ async def get_all_recipes(session: aiohttp.ClientSession, rh: recipe.RecipeHandl
     batch_results = await asyncio.gather(*tasks)
 
     for batch_result in batch_results:
-        # print(batch_result)
         for item1, item2, new_item in batch_result:
-            if new_item and new_item != "Nothing" and new_item not in current:
-                results.append(new_item)
+            results.append((item1, item2, new_item))
+
+    return results
+
+
+async def get_all_recipes(session: aiohttp.ClientSession, rh: recipe.RecipeHandler, current: list[str]):
+    results = []
+    batch_results = await _get_all_recipes(session, rh, current)
+    for item1, item2, new_item in batch_results:
+        if new_item and new_item != "Nothing" and new_item in current:
+            results.append(new_item)
 
     print(f"Total recipes: {len(results)}")
     return results
 
 
 async def request_extra_generation(session: aiohttp.ClientSession, rh: recipe.RecipeHandler, current: list[str]):
-    batch_results = await get_all_recipes(session, rh, current)
-    results = []
+    batch_results = await _get_all_recipes(session, rh, current)
     new_items = set()
 
-    for batch_result in batch_results:
-        # print(batch_result)
-        for item1, item2, new_item in batch_result:
-            if new_item and new_item != "Nothing" and new_item not in current:
-                results.append(new_item)
-
-    for new_item in results:
+    for item1, item2, new_item in batch_results:
         if new_item and new_item != "Nothing" and new_item not in current:
             new_items.add(new_item)
 
