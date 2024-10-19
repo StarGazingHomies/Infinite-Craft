@@ -1,9 +1,9 @@
 import json
 import math
 
-import llama_cpp
-from huggingface_hub import hf_hub_download
-from llama_cpp import Llama
+# import llama_cpp
+# from huggingface_hub import hf_hub_download
+# from llama_cpp import Llama
 
 
 WORD_TOKEN_LIMIT = 20
@@ -48,19 +48,19 @@ def to_start_case(s: str) -> str:
     return new_str
 
 
-class Tokenizer:
-    model: Llama
-    tokenizer: llama_cpp.LlamaTokenizer
-
-    def __init__(self, name: str = "Havmand/minillama", file: str = "minillama.gguf"):
-        self.model = Llama(hf_hub_download(name, filename=file))
-        self.tokenizer = self.model.tokenizer()
-
-    def tokenize(self, text: str) -> list[int]:
-        return self.tokenizer.tokenize(bytes(text, "utf-8"))
-
-    def decode(self, tokens: list[int]) -> str:
-        return self.tokenizer.decode(tokens)
+# class Tokenizer:
+#     model: Llama
+#     tokenizer: llama_cpp.LlamaTokenizer
+#
+#     def __init__(self, name: str = "Havmand/minillama", file: str = "minillama.gguf"):
+#         self.model = Llama(hf_hub_download(name, filename=file))
+#         self.tokenizer = self.model.tokenizer()
+#
+#     def tokenize(self, text: str) -> list[int]:
+#         return self.tokenizer.tokenize(bytes(text, "utf-8"))
+#
+#     def decode(self, tokens: list[int]) -> str:
+#         return self.tokenizer.decode(tokens)
 
 
 def main():
