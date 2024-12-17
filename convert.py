@@ -841,7 +841,8 @@ def analyze_softlocks(file: str, persistent_file: str, *, softlock_limit=0.95):
 def poseidons(result: str):
     rh = recipe.RecipeHandler([])
     crafts = rh.get_crafts(result)
-    with open(f"{result.replace(" ", "_")}_crafts.txt", "w", encoding="utf-8") as f:
+    r_sanitized = result.replace(" ", "_")
+    with open(f"{r_sanitized}_crafts.txt", "w", encoding="utf-8") as f:
         for craft in crafts:
             f.write(f"{craft[0]}  +  {craft[1]}\n")
 
@@ -860,7 +861,8 @@ def count_poseidons(result: str):
         else:
             ingredients[craft[1]] = 1
 
-    with open(f"{result.replace(" ", "_")}_poseidons.json", "w", encoding="utf-8") as f:
+    r_sanitized = result.replace(" ", "_")
+    with open(f"{r_sanitized}_poseidons.json", "w", encoding="utf-8") as f:
         json.dump(ingredients, f, ensure_ascii=False)
 
 
@@ -873,7 +875,9 @@ def process_poseidons(result: str, file: str):
         items.append((key, value))
     items.sort(key=lambda x: x[1], reverse=True)
 
-    with open(f"{result.replace(" ", "_")}_poseidon_ingredients.txt", "w", encoding="utf-8") as f:
+
+    r_sanitized = result.replace(" ", "_")
+    with open(f"{r_sanitized}_poseidon_ingredients.txt", "w", encoding="utf-8") as f:
         for item in items:
             f.write(f"{item[0]}: {item[1]}\n")
 
@@ -917,7 +921,8 @@ def process_poseidons_percentage(result: str, poseidon_file: str, occurrences_fi
             items.append((key, value, occurrences[key]))
     items.sort(key=lambda x: x[1] / x[2], reverse=True)
 
-    with open(f"{result.replace(" ", "_")}_poseidon_ingredients_percentage.txt", "w", encoding="utf-8") as f:
+    r_sanitized = result.replace(" ", "_")
+    with open(f"{r_sanitized}_poseidon_ingredients_percentage.txt", "w", encoding="utf-8") as f:
         for item in items:
             f.write(f"{item[0]:<30}: {item[1]:>5} / {item[2]:>5} ( {item[1] / item[2] * 100:.2f}% )\n")
 
@@ -1057,6 +1062,49 @@ def analyze_tmp(file: str):
             print(f"{depth} = {item}")
 
 
+def convert_to_savefile_new(output_file: str):
+    rh = recipe.RecipeHandler([])
+    items_cur = rh.db.cursor()
+    items_cur.execute("SELECT * FROM items")
+
+    items = {}
+    items_savefile = {}
+    for i in items_cur:
+        items[i[2]] = [i[0], i[1], i[3]]
+        items_savefile[i[2]] = {"text": i[2], "emoji": i[1], "discovered": i[3]}
+
+    recipes_cur = rh.db.cursor()
+    recipes_cur.execute("""
+    SELECT ing1.name, ing2.name, result.name
+    FROM recipes
+    JOIN items   AS ing1   ON ing1.id = recipes.ingredient1_id
+    JOIN items   AS ing2   ON ing2.id = recipes.ingredient2_id
+    JOIN items   AS result ON result.id = recipes.result_id
+    """)
+    recipes = {}
+
+    processed_count = 0
+    for r in recipes_cur:
+        processed_count += 1
+        if processed_count % 100000 == 0:
+            print(f"Processed {processed_count} recipes")
+
+        if r[2] == "Nothing" or r[2] == "Nothing\t":
+            continue
+
+        u = {"emoji": items[r[0]][1], "text": r[0]}
+        v = {"emoji": items[r[1]][1], "text": r[1]}
+
+        if r[2] in recipes:
+            recipes[r[2]].append([u, v])
+        else:
+            recipes[r[2]] = [[u, v]]
+
+    with open(output_file, "w", encoding="utf-8") as f:
+        json.dump({"elements": list(items_savefile.values()), "recipes": recipes, "darkMode": True}, f, ensure_ascii=False)
+
+
+
 def count_FDs(file: str):
     with open(file, "r", encoding="utf-8") as f:
         lines = f.readlines()
@@ -1167,15 +1215,17 @@ def analyze_optimal_save(output_file: str = "4_letter_sequences.txt"):
 
 
 async def new_api_test():
-    addr = util.load_json("headers.json")["addr"]
-    rh = recipe.RecipeHandler(util.DEFAULT_STARTING_ITEMS, request_addr=addr)
+    cfg = util.load_json("headers.json")
+    rh = recipe.RecipeHandler(util.DEFAULT_STARTING_ITEMS, **cfg)
     async with aiohttp.ClientSession() as s:
-        print(await rh.request_batch(s, [("Water", "Fire"), ("Water", "Water"), ("Fire", "Fire")]))
+        print(await rh.request_batch(s, [("Water", "[s]")]))
 
 
 if __name__ == '__main__':
     pass
-    asyncio.run(new_api_test())
+    # asyncio.run(new_api_test())
+
+    convert_to_savefile_new("savefile_test.txt")
 
     # count_recipes()
     # analyze_recipes("result_count.json")

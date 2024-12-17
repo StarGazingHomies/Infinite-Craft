@@ -240,7 +240,7 @@ def optimize(
             continue
 
         # Check if the current state is already processed
-        if frozenset(current_state.current) in processed:
+        if not completed and frozenset(current_state.current) in processed:
             continue
         processed.add(frozenset(current_state.current))
 

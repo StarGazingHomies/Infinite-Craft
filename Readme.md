@@ -15,17 +15,15 @@ Install the required packages with:
 pip install -r requirements.txt
 ```
 
-Then, you need to provide headers in `headers.json` for the Neal API.
-This is not a tutorial on how to scrape the API.
-
-To run the script to start searching low-depth elements, simply run:
-```commandline
-python main.py
-```
-
 `speedrun.py` can help you check your speedrun recipes for errors.
 `optimize.py` can help you optimize your speedruns.
 Use `-h` for help with any CLI arguments.
+
+Note: You need to provide your own configuration and headers for requests
+in `config.json` and `headers.json` respectively.
+
+Currently, this code is NOT set up to request from Neal's Infinite Craft
+API. You will need to set up your own request system.
 
 ## Methodology
 

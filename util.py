@@ -1,5 +1,6 @@
 import json
 import math
+import urllib.parse
 
 # import llama_cpp
 # from huggingface_hub import hf_hub_download
@@ -38,6 +39,21 @@ def file_sanitize(s: str) -> str:
     return s
 
 
+def uriencode(s: str) -> str:
+    new_s = ""
+    for c in s:
+        if ord(c) > 128:
+            new_s += urllib.parse.quote(c)
+        else:
+            new_s += c
+    # print(new_s)
+    return new_s.replace("\\", "\\\\")
+
+
+def uriencode_2(s: str) -> str:
+    return urllib.parse.quote(s)
+
+
 def to_start_case(s: str) -> str:
     new_str = ""
     for i in range(len(s)):
@@ -64,9 +80,10 @@ def to_start_case(s: str) -> str:
 
 
 def main():
-    from transformers import pipeline
-    pipe = pipeline(model='togethercomputer/GPT-JT-6B-v1')
-    print(pipe('''Hi! A:'''))
+    # from transformers import pipeline
+    # pipe = pipeline(model='togethercomputer/GPT-JT-6B-v1')
+    # print(pipe('''Hi! A:'''))
+    uriencode("Hi! A: 草泥马")
 
 
 if __name__ == "__main__":
@@ -111,3 +128,4 @@ def load_json(file: str) -> dict:
 def save_json(file: str, data: dict):
     with open(file, "w", encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
+

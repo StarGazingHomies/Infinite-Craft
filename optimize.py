@@ -27,14 +27,26 @@ from optimizers.optimizer_interface import OptimizerRecipeList, optimizer_recipe
 async def _get_all_recipes(session: aiohttp.ClientSession, rh: recipe.RecipeHandler, current: list[str]):
     total_recipe_count = len(current) * (len(current) + 1) // 2
     completed_count = 0
+    local_count = 0
+    t0 = time.time()
 
     def progress_addn(n: int = 1):
-        nonlocal completed_count
+        nonlocal completed_count, t0, local_count
         completed_count += n
         cur_precentage = int(completed_count / total_recipe_count * 100)
         last_precentage = int((completed_count - n) / total_recipe_count * 100)
+
+        try:
+            cur_time = time.time()
+            elapsed_time = cur_time - t0
+            total_request_count = total_recipe_count - local_count
+            request_count = completed_count - local_count
+            estimated_time = elapsed_time / request_count * total_request_count - elapsed_time
+        except ZeroDivisionError:
+            estimated_time = 0
+
         if cur_precentage != last_precentage:
-            print(f"Recipe Progress: {cur_precentage}% ({completed_count}/{total_recipe_count})")
+            print(f"Recipe Progress: {cur_precentage}% ({completed_count}/{total_recipe_count}) | ETA: {estimated_time:.2f}s")
 
     async def batch_combine(session: aiohttp.ClientSession, batch: list[tuple[str, str]]):
         result = await rh.combine_batch(session, batch, check_local=False)
@@ -47,9 +59,11 @@ async def _get_all_recipes(session: aiohttp.ClientSession, rh: recipe.RecipeHand
     for i, item1 in enumerate(current):
         for item2 in current[i:]:
             local_result = rh.get_local(item1, item2)
-            print(f"Local: {item1} + {item2} = {local_result}")
-            if local_result and local_result != rh.local_nothing_indication and local_result not in current:
+            # print(f"Local: {item1} + {item2} = {local_result}")
+
+            if local_result and local_result != rh.local_nothing_indication:
                 results.append((item1, item2, local_result))
+                local_count += 1
                 progress_addn()
                 continue
 
@@ -75,7 +89,7 @@ async def get_all_recipes(session: aiohttp.ClientSession, rh: recipe.RecipeHandl
     batch_results = await _get_all_recipes(session, rh, current)
     for item1, item2, new_item in batch_results:
         if new_item and new_item != "Nothing" and new_item in current:
-            results.append(new_item)
+            results.append((item1, item2, new_item))
 
     print(f"Total recipes: {len(results)}")
     return results
@@ -127,7 +141,14 @@ async def initialize_optimizer(
         rh: recipe.RecipeHandler,
         items: list[str],
         extra_generations: int = 1,
-        local_generations: int = 0) -> OptimizerRecipeList:
+        local_generations: int = 0,
+        banned_items: list[str] = None) -> OptimizerRecipeList:
+
+    if banned_items is None:
+        banned_items = []
+
+    # TODO: Logic that avoids requesting with a banned item
+
     # Get extra generations
     for i in range(extra_generations):
         new_items = await request_extra_generation(session, rh, items)
@@ -144,6 +165,7 @@ async def initialize_optimizer(
     recipes = await get_all_recipes(session, rh, items)
     recipe_list = OptimizerRecipeList(items)
     for recipe_data in recipes:
+        # print(f"Recipe: {recipe_data[0]} + {recipe_data[1]} = {recipe_data[2]}")
         recipe_list.add_recipe_name(recipe_data[2], recipe_data[0], recipe_data[1])
     return recipe_list
 
@@ -166,6 +188,11 @@ async def main(*,
     max_crafts = len(crafts)
     final_items_for_current_recipe = list(util.DEFAULT_STARTING_ITEMS) + craft_results
 
+    banned = []
+    if len(target) == 1:
+        # Since this is single-target, we don't need anything that can be crafted from the target.
+        banned = target.copy()
+
     # Request and build items cache
     config = util.load_json("config.json")
 
@@ -176,10 +203,13 @@ async def main(*,
                 rh,
                 final_items_for_current_recipe,
                 extra_generations,
-                local_generations)
+                local_generations,
+                banned_items=banned)
+    print(f"{len(optimizer_recipes.ids)} items cached.")
 
     # Generate generations
     optimizer_recipes.generate_generations()
+    print(f"{len(optimizer_recipes.gen)} generations generated.")
 
     # Initial crafts for deviation checking
     initial_crafts = [optimizer_recipes.get_id(item) for item in list(util.DEFAULT_STARTING_ITEMS) + craft_results]
@@ -284,15 +314,15 @@ def benchmark_main():
 
 if __name__ == '__main__':
     # benchmark_main()
-    args = parse_arguments()
+    cli_arguments = parse_arguments()
 
     if os.name == 'nt':
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     asyncio.run(main(
-        file=args.filename,
-        extra_generations=args.extra_generations,
-        local_generations=args.local_generations,
-        deviation=args.deviation,
-        target=args.target,
-        local_only=args.local
+        file=cli_arguments.filename,
+        extra_generations=cli_arguments.extra_generations,
+        local_generations=cli_arguments.local_generations,
+        deviation=cli_arguments.deviation,
+        target=cli_arguments.target,
+        local_only=cli_arguments.local
     ))

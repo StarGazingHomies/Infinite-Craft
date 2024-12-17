@@ -73,7 +73,7 @@ persistent_config = util.load_json("config.json")
 
 recipe_handler: Optional[recipe.RecipeHandler] = recipe.RecipeHandler(init_state, **persistent_config)
 optimal_handler: Optional[optimals.OptimalRecipeStorage] = optimals.OptimalRecipeStorage()
-depth_limit = 4
+depth_limit = 6
 extra_depth = 0
 case_sensitive = True
 allow_starting_elements = False
@@ -270,7 +270,9 @@ async def dls(session: aiohttp.ClientSession, state: GameState, depth: int) -> i
             if i <= j:
                 request_list.append((u, v))
     # First do the batch requests
-    await recipe_handler.combine_batch(session, request_list)
+    current_combinations = await recipe_handler.combine_batch(session, request_list)
+    # TODO: Only request locally a single time - that is, use the results above to inform next steps directly
+    # instead of having to pass in recipe handler and let state.child request
 
     count = 0  # States counter
     unused_items = state.unused_items()  # Unused items

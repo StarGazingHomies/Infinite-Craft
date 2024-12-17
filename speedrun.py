@@ -301,6 +301,9 @@ async def dynamic_check_script(speedrun_recipe: SpeedrunRecipe) -> bool:
             ing1, ing2, result, is_target = craft
             true_result = await recipe_handler.combine(session, ing1.strip(), ing2.strip())
 
+            if true_result == "Nothing" or true_result == "Nothing\t" or true_result is None:
+                true_result = await recipe_handler.combine(session, ing2.strip(), ing1.strip(), ignore_local=True)
+
             if true_result != result.strip():
                 has_issues = True
                 print(f"Craft {ing1} + {ing2} -> {result} is not correct. The correct response is {true_result}")

@@ -1,5 +1,7 @@
 import atexit
 import os
+import urllib
+
 import random
 import sys
 import time
@@ -50,7 +52,7 @@ class RecipeHandler:
     sleep_default: float = 1.0
     retry_exponent: float = 2.0
     local_only: bool = False
-    trust_cache_nothing: bool = False  # Trust the local cache for "Nothing" results
+    trust_cache_nothing: bool = True  # Trust the local cache for "Nothing" results
     trust_first_run_nothing: bool = False  # Save as "Nothing" in the first run
     local_nothing_indication: str = "Nothing\t"  # Indication of untrusted "Nothing" in the local cache
     nothing_verification: int = 3  # Verify "Nothing" n times with the API
@@ -58,6 +60,7 @@ class RecipeHandler:
     nothing_cooldown: float = 5.0  # Cooldown between "Nothing" verifications
     connection_timeout: float = 10.0  # Connection timeout
     batch_limit: int = 50  # Maximum number of requests in a batch
+    error_retry: bool = True  # False = Nothing on error, True = Retry on error
 
     # Auto-commit settings
     auto_commit: bool = True
@@ -298,6 +301,9 @@ class RecipeHandler:
 
     # Adapted from analog_hors on Discord
     async def combine(self, session: aiohttp.ClientSession, a: str, b: str, *, ignore_local: bool = False) -> str:
+        if a > b:
+            a, b = b, a
+
         # Query local cache
         local_result = None
         if not ignore_local:
@@ -374,11 +380,15 @@ class RecipeHandler:
         if need_request:
             # print(f"Requesting {len(need_request)} items...", flush=True)
             # TODO: Nothing protection, re-requesting
-            i = 0
-            while i < len(need_request):
+            # TODO: Fix this garbage
+            # i = 0
+            # while i < len(need_request):
                 # Yes, I'm modifying the list while in a loop
                 # what about it? >:3
+                # (Yes, it's borked)
+            for i in range(0, len(need_request), self.batch_limit):
                 current_batch = need_request[i:i + self.batch_limit]
+                # print(current_batch, flush=True)
                 r = await self.request_batch(session, current_batch)
                 for i, result in enumerate(r):
                     a, b = current_batch[i]
@@ -387,18 +397,23 @@ class RecipeHandler:
                         if 'error' in result:
                             print(f"Error {result['error']} in batch request: {a} + {b}", file=sys.stderr)
                         else:
-                            print(f"Nothing result in batch request: {a} + {b}", flush=True)
+                            pass
+                            # print(f"Nothing result in batch request: {a} + {b}", flush=True)
 
-                        request_mistake_counts[batch_id[(a, b)]] += 1
-                        if request_mistake_counts[batch_id[(a, b)]] < self.batch_nothing_verification:
-                            need_request.append((a, b))
-                            continue
-                        else:
-                            result = {"result": "Nothing", "emoji": "", "isNew": False}
+                        # request_mistake_counts[batch_id[(a, b)]] += 1
+
+                        # if request_mistake_counts[batch_id[(a, b)]] > self.batch_nothing_verification:
+                        #     print(f"Request Nothing/Error count exceeded for {a} + {b}", flush=True)
+                        result = {"result": "Nothing", "emoji": "", "isNew": False}
+                        # self.save_response(a, b, {"result": self.local_nothing_indication, "emoji": "", "isNew": False})
+                        # else:
+                        #     print(f"Re-requesting Nothing/Error result (attempt #{request_mistake_counts[batch_id[(a, b)]]})...", flush=True)
+                        #     need_request.append((a, b))
+                        #     continue
                     else:
                         self.save_response(a, b, result)
                     final_results[batch_id[(a, b)]] = (a, b, result['result'])
-                i += self.batch_limit
+                # i += self.batch_limit
 
         return final_results
 
@@ -423,9 +438,14 @@ class RecipeHandler:
             time.sleep(self.request_cooldown - (t - self.last_request))
         self.last_request = time.perf_counter()
 
+        # a = urllib.parse.quote(a, safe=':/?&=, \'!@#$%^*(){}-+_')
+        # b = urllib.parse.quote(b, safe=':/?&=, \'!@#$%^*(){}-+_')
+        a = util.uriencode(a)
+        b = util.uriencode(b)
+
         data = f'[["{a}", "{b}"]]'
         url = self.request_addr
-        # print(url, data)
+        print(url, data)
 
         while True:
             try:
@@ -447,11 +467,23 @@ class RecipeHandler:
                 self.sleep_time *= self.retry_exponent
                 print("Retrying...", flush=True)
 
-    async def _request_batch(self, session, batch):
-        batch_str_list = [f'["{a}", "{b}"]' for a, b in batch]
+    async def _request_batch(self, session: aiohttp.ClientSession, batch):
+        batch_uri_list = [
+            (util.uriencode(a),
+             util.uriencode(b))
+            for (a, b) in batch]
+        # batch_uri_list = [(a, b) for (a, b) in batch]
+        batch_str_list = [f'["{a}", "{b}"]' for a, b in batch_uri_list]
         batch_data = "[" + ",".join(batch_str_list) + "]"
 
         url = self.request_addr
+
+        # TODO: WHY DOES PYTHON NOT HAVE URI ENCODE
+        # No that's not a typo, URI, not URL.
+        # Fuck you google
+        # batch_data = urllib.parse.quote(batch_data, safe=':/?&=, []"\'!@#$%^*(){}-+_')
+
+        # batch_data = util.uriencode(batch_data)
 
         # print(url, batch_data)
         while True:
@@ -462,11 +494,15 @@ class RecipeHandler:
                         self.sleep_time = self.sleep_default
                         return await resp.json(content_type=None)
                     else:
-                        print(f"Request failed with status {resp.status}", file=sys.stderr)
+                        print(f"Batch request of {len(batch)} items failed with status {resp.status}", file=sys.stderr)
+                        print(f"Batch data: {batch_data}", file=sys.stderr)
 
-                        time.sleep(self.sleep_time)
-                        self.sleep_time *= self.retry_exponent
-                        print("Retrying...", flush=True)
+                        if self.error_retry:
+                            time.sleep(self.sleep_time)
+                            self.sleep_time *= self.retry_exponent
+                            print("Retrying...", flush=True)
+                        else:
+                            return [{"result": "Nothing", "emoji": "", "isNew": False}] * len(batch)
             except Exception as e:
                 # Handling more than just that one error
                 print("Unrecognized Error: ", e, file=sys.stderr)
