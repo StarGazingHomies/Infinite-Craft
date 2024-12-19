@@ -73,7 +73,7 @@ persistent_config = util.load_json("config.json")
 
 recipe_handler: Optional[recipe.RecipeHandler] = recipe.RecipeHandler(init_state, **persistent_config)
 optimal_handler: Optional[optimals.OptimalRecipeStorage] = optimals.OptimalRecipeStorage()
-depth_limit = 6
+depth_limit = 4
 extra_depth = 0
 case_sensitive = True
 allow_starting_elements = False

@@ -29,7 +29,7 @@ persistent_config = util.load_json("config.json")
 
 recipe_handler: Optional[recipe.RecipeHandler] = recipe.RecipeHandler(init_state, **persistent_config)
 optimal_handler: Optional[optimals.OptimalRecipeStorage] = optimals.OptimalRecipeStorage()
-depth_limit = 6
+depth_limit = 4
 extra_depth = 0
 case_sensitive = True
 allow_starting_elements = False
@@ -61,6 +61,8 @@ class GameState:
         self.used = used
 
     def __str__(self):
+        if self.state[-1] < 0:
+            return "<Initial State>"
         steps = [self.items[-1] + ":"]
         for i in range(len(self.state)):
             left, right = int_to_pair(self.state[i])
@@ -106,13 +108,10 @@ class GameState:
             l.append((self.items[left], self.items[right], self.items[i]))
         return l
 
-    def get_requests(self) -> Optional[list[int]]:
-        pass
-
-    def get_children(self, depth: int) -> Optional[list[int]]:
+    def get_children(self, depth: int) -> list[int]:
         unused_items = self.unused_items()
         if len(unused_items) > depth + 1:  # Impossible to use all elements, since we have too few crafts left
-            return None
+            return []
         elif len(unused_items) > depth:  # We must start using unused elements NOW.
             states = []
             for j in range(len(unused_items)):  # For loop ordering is important. We want increasing pair_to_int order.
@@ -121,10 +120,29 @@ class GameState:
             return states
         else:
             lower_limit = 0
-            if depth == 1 and self.tail_index() != -1:  # Must use the 2nd last element, if it's not a default item.
-                lower_limit = limit(len(self) - 1)
+            if self.tail_index != -1:
+                if depth == 1:  # Must use the 2nd last element, if it's not a default item.
+                    lower_limit = limit(len(self) - 1)
+                else:
+                    lower_limit = self.tail_index() + 1
 
             return list(range(lower_limit, limit(len(self))))  # Regular ol' searching
+
+    def request_limit(self) -> int:
+        return limit(len(self) - 1)
+
+    def get_requests_index(self, depth: int) -> list[int]:
+        r = self.get_children(depth)
+        if self.tail_index() != -1:
+            return list(filter(lambda x: x >= self.request_limit(), r))
+        return r
+
+    def get_requests(self, depth: int) -> list[tuple[str, str]]:
+        r = []
+        for i in self.get_requests_index(depth):
+            u, v = int_to_pair(i)
+            r.append((self.items[u], self.items[v]))
+        return r
 
     def child(self, i: int, result: str) -> Optional['GameState']:
         # Invalid indices
@@ -177,6 +195,115 @@ class GameState:
         return self.state[-1]
 
 
+# print(init_gamestate.get_children(3))
+# print(init_gamestate.get_requests_index(3))
+# print(init_gamestate.get_requests(3))
+# state2 = init_gamestate.child(0, "Lake")
+# print(state2.get_children(2))
+# print(state2.get_requests_index(2))
+# print(state2.get_requests(2))
+
+
+async def dls(session: aiohttp.ClientSession, init_state: GameState, depth: int):
+    # Maintain the following
+    new_states: list[tuple[int, GameState]] = [(depth, init_state), ]
+    waiting_states: list[tuple[int, GameState]] = []
+    # There is a counter for duplicate requests, so they are only requested once, but multiple states can use it
+    # until it falls out of cache
+    request_list: dict[tuple[str, str], int] = {}
+    finished_requests: dict[tuple[str, str], tuple[str, int]] = {}
+
+    dls_results = set()
+
+    while len(new_states) > 0 or len(request_list) > 0:
+        print("----------- New Loop ------------")
+        print(new_states, waiting_states, request_list, finished_requests, sep="\n")
+
+        if len(new_states) > 0:
+            print("> Processing new state")
+            # Process new states' tail
+            cur_depth, cur_state = new_states.pop(-1)
+            print(cur_depth, cur_state)
+
+            if cur_depth == 0:
+                print("> Found leaf state")
+                print(str(cur_state))
+                dls_results.add(cur_state.tail_item())
+                # TODO: Process state
+                continue
+
+            # Get the requests
+            requests = cur_state.get_requests(depth)
+            print("Requests:", requests)
+            if requests is None:
+                continue
+
+            # Add the requests to the list
+            for r in requests:
+                if r in finished_requests:
+                    finished_requests[r] = (finished_requests[r][0], finished_requests[r][1] + 1)
+                elif r in request_list:
+                    request_list[r] = request_list[r] + 1
+                else:
+                    request_list[r] = 1
+
+            waiting_states.append((cur_depth, cur_state))
+
+        # Don't process requests if there's less than a single batch
+        if len(new_states) != 0 and len(request_list) <= util.BATCH_SIZE:
+            continue
+
+        # Process the requests
+        print("Requesting results...")
+        print("Request list:", request_list)
+        print("Already finished:", finished_requests)
+        requests = list(request_list.keys())[-util.BATCH_SIZE:]
+        print("Requests:", requests)
+        results = await recipe_handler.combine_batch(session, requests)
+        print("Results:", results)
+        for i, r in enumerate(results):
+            finished_requests[(r[0], r[1])] = (r[2], request_list[(r[0], r[1])])
+
+        request_list = {k: v for k, v in request_list.items() if k not in requests}
+
+        print("New finished:", finished_requests)
+
+        new_waiting_states = []
+        # Process the results
+        for depth, state in waiting_states[::-1]:
+            print("Matching results:", state, state.get_requests(depth), state.get_children(depth), sep="\n")
+            finished = True
+            for i in state.get_children(depth):
+                u, v = util.int_to_pair(i)
+                combination_result = None
+                if i < state.request_limit():
+                    # Local result
+                    combination_result = await recipe_handler.combine(session, state.items[u], state.items[v])
+                else:
+                    try:
+                        combination_result, count = finished_requests[(state.items[u], state.items[v])]
+                        # print(combination_result, count)
+                        if count == 1:
+                            finished_requests.pop((state.items[u], state.items[v]))
+                        else:
+                            finished_requests[(state.items[u], state.items[v])] = (combination_result, count - 1)
+                    except KeyError:
+                        finished = False
+                        break
+
+                if combination_result:
+                    new_state = state.child(i, combination_result)
+                    if new_state:
+                        new_states.append((depth - 1, new_state))
+
+            if not finished:
+                new_waiting_states.append((depth, state))
+
+        waiting_states = new_waiting_states
+
+    return dls_results
+
+
 init_gamestate = GameState(
                 list(init_state),
                 [-1 for _ in range(len(init_state))],
@@ -184,5 +311,27 @@ init_gamestate = GameState(
                 [0 for _ in range(len(init_state))]
             )
 
-print(init_gamestate.get_children(2))
-print(init_gamestate.child(0, "Lake"))
+
+async def main():
+    async with aiohttp.ClientSession() as session:
+        r = await dls(
+            session,
+            init_gamestate,
+            depth_limit)
+        print(len(r), r)
+
+
+if __name__ == "__main__":
+    # Parse arguments
+    # args = parse_args()
+    # init_state = tuple(args.starting_items)
+    # recipe_handler = recipe.RecipeHandler(init_state)
+    # depth_limit = args.depth
+    # extra_depth = args.extra_depth
+    # case_sensitive = args.case_sensitive
+    # allow_starting_elements = args.allow_starting_elements
+    # resume_last_run = args.resume_last_run
+
+    if os.name == 'nt':
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    asyncio.run(main())
