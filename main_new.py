@@ -29,7 +29,7 @@ persistent_config = util.load_json("config.json")
 
 recipe_handler: Optional[recipe.RecipeHandler] = recipe.RecipeHandler(init_state, **persistent_config)
 optimal_handler: Optional[optimals.OptimalRecipeStorage] = optimals.OptimalRecipeStorage()
-depth_limit = 2
+depth_limit = 6
 extra_depth = 0
 case_sensitive = True
 allow_starting_elements = False
@@ -206,28 +206,39 @@ async def dls(session: aiohttp.ClientSession, init_state: GameState, depth: int)
     request_list: dict[tuple[str, str], int] = {}
     finished_requests: dict[tuple[str, str], tuple[str, int]] = {}
 
-    dls_results = set()
+    dls_results: set[str] = set()
+    loop_counter: int = 0
+    status_period: int = 10000
 
     while len(new_states) > 0 or len(request_list) > 0:
-        print("----------- New Loop ------------")
-        print(new_states, waiting_states, request_list, finished_requests, sep="\n")
+        # print("----------- New Loop ------------")
+        # print(new_states, waiting_states, request_list, finished_requests, sep="\n")
+        loop_counter += 1
+        if loop_counter >= status_period:
+            # print(new_states, waiting_states, request_list, finished_requests, sep="\n")
+            print(f"""New States: {len(new_states)} items
+Waiting States: {len(waiting_states)} items
+Request List: {len(request_list)} items
+Finished requests: {len(finished_requests)} items\n\n""")
+            loop_counter = 0
+
 
         if len(new_states) > 0:
-            print("> Processing new state")
+            # print("> Processing new state")
             # Process new states' tail
             cur_depth, cur_state = new_states.pop(-1)
-            print(cur_depth, cur_state)
+            # print(cur_depth, cur_state)
 
             if cur_depth == 0:
-                print("> Found leaf state")
-                print(str(cur_state))
+                # print("> Found leaf state")
+                # print(str(cur_state))
                 dls_results.add(cur_state.tail_item())
                 # TODO: Process state
                 continue
 
             # Get the requests
             requests = cur_state.get_requests(cur_depth)
-            print("Requests:", requests)
+            # print("Requests:", requests)
             if requests is None:
                 continue
 
@@ -307,12 +318,14 @@ init_gamestate = GameState(
 
 async def main():
     async with aiohttp.ClientSession() as session:
+        final_set = set()
         for depth in range(1, depth_limit+1):
             r = await dls(
                 session,
                 init_gamestate.copy(),
                 depth)
-            print(len(r), r)
+            final_set = final_set.union(r)
+            print(len(r), len(final_set))
 
 
 if __name__ == "__main__":
