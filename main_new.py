@@ -29,7 +29,7 @@ persistent_config = util.load_json("config.json")
 
 recipe_handler: Optional[recipe.RecipeHandler] = recipe.RecipeHandler(init_state, **persistent_config)
 optimal_handler: Optional[optimals.OptimalRecipeStorage] = optimals.OptimalRecipeStorage()
-depth_limit = 4
+depth_limit = 2
 extra_depth = 0
 case_sensitive = True
 allow_starting_elements = False
@@ -50,7 +50,6 @@ def limit(n: int) -> int:
 class GameState:
     items: list[str]
     state: list[int]
-    visited: list[set[str]]
     used: list[int]
     children: set[str]
 
@@ -99,6 +98,9 @@ class GameState:
     def __hash__(self):
         return hash(str(self.state))
 
+    def copy(self):
+        return GameState(self.items.copy(), self.state.copy(), self.children.copy(), self.used.copy())
+
     def to_list(self) -> list[tuple[str, str, str]]:
         l: list[tuple[str, str, str]] = []
         for i in range(len(self.state)):
@@ -120,7 +122,7 @@ class GameState:
             return states
         else:
             lower_limit = 0
-            if self.tail_index != -1:
+            if self.tail_index() != -1:
                 if depth == 1:  # Must use the 2nd last element, if it's not a default item.
                     lower_limit = limit(len(self) - 1)
                 else:
@@ -195,15 +197,6 @@ class GameState:
         return self.state[-1]
 
 
-# print(init_gamestate.get_children(3))
-# print(init_gamestate.get_requests_index(3))
-# print(init_gamestate.get_requests(3))
-# state2 = init_gamestate.child(0, "Lake")
-# print(state2.get_children(2))
-# print(state2.get_requests_index(2))
-# print(state2.get_requests(2))
-
-
 async def dls(session: aiohttp.ClientSession, init_state: GameState, depth: int):
     # Maintain the following
     new_states: list[tuple[int, GameState]] = [(depth, init_state), ]
@@ -233,7 +226,7 @@ async def dls(session: aiohttp.ClientSession, init_state: GameState, depth: int)
                 continue
 
             # Get the requests
-            requests = cur_state.get_requests(depth)
+            requests = cur_state.get_requests(cur_depth)
             print("Requests:", requests)
             if requests is None:
                 continue
@@ -254,24 +247,24 @@ async def dls(session: aiohttp.ClientSession, init_state: GameState, depth: int)
             continue
 
         # Process the requests
-        print("Requesting results...")
-        print("Request list:", request_list)
-        print("Already finished:", finished_requests)
+        # print("Requesting results...")
+        # print("Request list:", request_list)
+        # print("Already finished:", finished_requests)
         requests = list(request_list.keys())[-util.BATCH_SIZE:]
-        print("Requests:", requests)
+        # print("Requests:", requests)
         results = await recipe_handler.combine_batch(session, requests)
-        print("Results:", results)
+        # print("Results:", results)
         for i, r in enumerate(results):
             finished_requests[(r[0], r[1])] = (r[2], request_list[(r[0], r[1])])
 
         request_list = {k: v for k, v in request_list.items() if k not in requests}
 
-        print("New finished:", finished_requests)
+        # print("New finished:", finished_requests)
 
         new_waiting_states = []
         # Process the results
         for depth, state in waiting_states[::-1]:
-            print("Matching results:", state, state.get_requests(depth), state.get_children(depth), sep="\n")
+            # print("Matching results:", state, state.get_requests(depth), state.get_children(depth), sep="\n")
             finished = True
             for i in state.get_children(depth):
                 u, v = util.int_to_pair(i)
@@ -314,11 +307,12 @@ init_gamestate = GameState(
 
 async def main():
     async with aiohttp.ClientSession() as session:
-        r = await dls(
-            session,
-            init_gamestate,
-            depth_limit)
-        print(len(r), r)
+        for depth in range(1, depth_limit+1):
+            r = await dls(
+                session,
+                init_gamestate.copy(),
+                depth)
+            print(len(r), r)
 
 
 if __name__ == "__main__":
