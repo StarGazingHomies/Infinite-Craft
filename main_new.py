@@ -29,7 +29,7 @@ persistent_config = util.load_json("config.json")
 
 recipe_handler: Optional[recipe.RecipeHandler] = recipe.RecipeHandler(init_state, **persistent_config)
 optimal_handler: Optional[optimals.OptimalRecipeStorage] = optimals.OptimalRecipeStorage()
-depth_limit = 6
+depth_limit = 8
 extra_depth = 0
 case_sensitive = True
 allow_starting_elements = False
@@ -219,7 +219,7 @@ async def dls(session: aiohttp.ClientSession, init_state: GameState, depth: int)
             print(f"""New States: {len(new_states)} items
 Waiting States: {len(waiting_states)} items
 Request List: {len(request_list)} items
-Finished requests: {len(finished_requests)} items\n\n""")
+Finished requests: {len(finished_requests)} items\n""")
             loop_counter = 0
 
 
@@ -282,7 +282,7 @@ Finished requests: {len(finished_requests)} items\n\n""")
                 combination_result = None
                 if i < state.request_limit():
                     # Local result
-                    combination_result = await recipe_handler.combine(session, state.items[u], state.items[v])
+                    combination_result = recipe_handler.get_local(state.items[u], state.items[v])
                 else:
                     try:
                         combination_result, count = finished_requests[(state.items[u], state.items[v])]

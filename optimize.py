@@ -58,7 +58,7 @@ async def _get_all_recipes(session: aiohttp.ClientSession, rh: recipe.RecipeHand
     results = []
     for i, item1 in enumerate(current):
         for item2 in current[i:]:
-            local_result = rh.get_local(item1, item2)
+            local_result = rh._get_local(item1, item2)
             # print(f"Local: {item1} + {item2} = {local_result}")
 
             if local_result and local_result != rh.local_nothing_indication:
@@ -110,7 +110,7 @@ def get_local_generation(rh: recipe.RecipeHandler, current: list[str]):
     new_items = set()
     for item1 in current:
         for item2 in current:
-            new_item = rh.get_local(item1, item2)
+            new_item = rh._get_local(item1, item2)
             if new_item and new_item != "Nothing" and new_item not in current:
                 new_items.add(new_item)
     return new_items
@@ -124,7 +124,7 @@ def get_all_local_recipes(rh: recipe.RecipeHandler, items: list[str]):
     items_set = set([item.lower() for item in items])
     for u, item1 in enumerate(items):
         for item2 in items[u:]:
-            new_item = rh.get_local(item1, item2)
+            new_item = rh._get_local(item1, item2)
             if new_item.lower() in items_set:
                 recipes.append((item1, item2, new_item))
             current_recipe += 1
