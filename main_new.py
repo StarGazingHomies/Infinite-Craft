@@ -29,7 +29,7 @@ persistent_config = util.load_json("config.json")
 
 recipe_handler: Optional[recipe.RecipeHandler] = recipe.RecipeHandler(init_state, **persistent_config)
 optimal_handler: Optional[optimals.OptimalRecipeStorage] = optimals.OptimalRecipeStorage()
-depth_limit = 8
+depth_limit = 3
 extra_depth = 0
 case_sensitive = True
 allow_starting_elements = False
@@ -100,6 +100,14 @@ class GameState:
 
     def copy(self):
         return GameState(self.items.copy(), self.state.copy(), self.children.copy(), self.used.copy())
+
+    def strong_repr(self):
+        return "==".join([
+            "=".join(self.items),
+            "=".join([str(i) for i in self.state]),
+            "=".join(self.children),
+            "=".join([str(i) for i in self.used])
+        ])
 
     def to_list(self) -> list[tuple[str, str, str]]:
         l: list[tuple[str, str, str]] = []
@@ -197,6 +205,15 @@ class GameState:
         return self.state[-1]
 
 
+def gamestate_from_strong_repr(s: str) -> GameState:
+    items, state, children, used = s.split("==")
+    items = items.split("=")
+    state = [int(i) for i in state.split("=")]
+    children = set(children.split("="))
+    used = [int(i) for i in used.split("=")]
+    return GameState(items, state, children, used)
+
+
 async def dls(session: aiohttp.ClientSession, init_state: GameState, depth: int):
     # Maintain the following
     new_states: list[tuple[int, GameState]] = [(depth, init_state), ]
@@ -224,10 +241,10 @@ Finished requests: {len(finished_requests)} items\n""")
 
 
         if len(new_states) > 0:
-            # print("> Processing new state")
+            print("> Processing new state")
             # Process new states' tail
             cur_depth, cur_state = new_states.pop(-1)
-            # print(cur_depth, cur_state)
+            print(cur_depth, cur_state.strong_repr().replace("==", "\n"))
 
             if cur_depth == 0:
                 # print("> Found leaf state")
@@ -271,6 +288,8 @@ Finished requests: {len(finished_requests)} items\n""")
         request_list = {k: v for k, v in request_list.items() if k not in requests}
 
         # print("New finished:", finished_requests)
+        # TODO: Is there a way to use callbacks to clean this up?
+        # Or, at least, let asyncio do the scheduling instead of this monstrosity
 
         new_waiting_states = []
         # Process the results
@@ -326,6 +345,18 @@ async def main():
                 depth)
             final_set = final_set.union(r)
             print(len(r), len(final_set))
+
+
+# TODO: Autosaving and recovering from crashes
+
+@atexit.register
+def save_current_state():
+    print("Autosaving progress... (DOES NOT SAVE, WIP)")
+    # current_state = [new_states, waiting_states, request_list, finished_requests]
+    current_state = {}
+    with open(persistent_temporary_file, "w", encoding="utf-8") as file:
+        json.dump(current_state, file, ensure_ascii=False, indent=4)
+    os.replace(persistent_temporary_file, persistent_file)
 
 
 if __name__ == "__main__":
