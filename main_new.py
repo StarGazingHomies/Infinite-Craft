@@ -6,6 +6,7 @@ import sys
 import time
 from functools import cache
 from typing import Optional
+from collections.abc import Iterator
 from urllib.parse import quote_plus
 
 import json
@@ -118,16 +119,14 @@ class GameState:
             l.append((self.items[left], self.items[right], self.items[i]))
         return l
 
-    def get_children(self, depth: int) -> list[int]:
+    def generate_children(self, depth: int) -> Iterator[int]:
         unused_items = self.unused_items()
         if len(unused_items) > depth + 1:  # Impossible to use all elements, since we have too few crafts left
-            return []
+            pass
         elif len(unused_items) > depth:  # We must start using unused elements NOW.
-            states = []
             for j in range(len(unused_items)):  # For loop ordering is important. We want increasing pair_to_int order.
                 for i in range(j):  # i != j. We have to use two for unused_items to decrease.
-                    states.append(pair_to_int(unused_items[i], unused_items[j]))
-            return states
+                    yield pair_to_int(unused_items[i], unused_items[j])
         else:
             lower_limit = 0
             if self.tail_index() != -1:
@@ -136,23 +135,22 @@ class GameState:
                 else:
                     lower_limit = self.tail_index() + 1
 
-            return list(range(lower_limit, limit(len(self))))  # Regular ol' searching
+            for i in range(lower_limit, limit(len(self))):
+                yield i  # Regular ol' searching
 
     def request_limit(self) -> int:
         return limit(len(self) - 1)
 
-    def get_requests_index(self, depth: int) -> list[int]:
-        r = self.get_children(depth)
+    def generate_requests_index(self, depth: int) -> Iterator[int]:
+        r = self.generate_children(depth)
         if self.tail_index() != -1:
-            return list(filter(lambda x: x >= self.request_limit(), r))
+            return filter(lambda x: x >= self.request_limit(), r)
         return r
 
-    def get_requests(self, depth: int) -> list[tuple[str, str]]:
-        r = []
-        for i in self.get_requests_index(depth):
+    def generate_requests(self, depth: int) -> Iterator[tuple[str, str]]:
+        for i in self.generate_requests_index(depth):
             u, v = int_to_pair(i)
-            r.append((self.items[u], self.items[v]))
-        return r
+            yield self.items[u], self.items[v]
 
     def child(self, i: int, result: str) -> Optional['GameState']:
         # Invalid indices
@@ -254,9 +252,9 @@ Finished requests: {len(finished_requests)} items\n""")
                 continue
 
             # Get the requests
-            requests = cur_state.get_requests(cur_depth)
+            requests = list(cur_state.generate_requests(cur_depth))
             # print("Requests:", requests)
-            if requests is None:
+            if not requests:
                 continue
 
             # Add the requests to the list
@@ -296,7 +294,7 @@ Finished requests: {len(finished_requests)} items\n""")
         for depth, state in waiting_states[::-1]:
             # print("Matching results:", state, state.get_requests(depth), state.get_children(depth), sep="\n")
             finished = True
-            for i in state.get_children(depth):
+            for i in state.generate_children(depth):
                 u, v = util.int_to_pair(i)
                 combination_result = None
                 if i < state.request_limit():
