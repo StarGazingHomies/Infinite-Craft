@@ -4,6 +4,7 @@ import os
 import random
 import sys
 import time
+from collections.abc import Iterator
 from functools import cache
 from typing import Optional
 from urllib.parse import quote_plus
@@ -57,7 +58,7 @@ for l1 in letters:
 
 # init_state = tuple(list(init_state) + elements + ["Periodic Table",])
 # init_state = tuple(list(init_state) + letters + letters2)
-# init_state = tuple(list(init_state) + letters + letters2 + letters3)
+init_state = tuple(list(init_state) + letters + letters2 + letters3)
 # init_state = tuple(list(init_state) + letters)
 # init_state = tuple(list(init_state) + speedrun_current_words)
 # init_state = ["Water"]
@@ -73,7 +74,7 @@ persistent_config = util.load_json("config.json")
 
 recipe_handler: Optional[recipe.RecipeHandler] = recipe.RecipeHandler(init_state, **persistent_config)
 optimal_handler: Optional[optimals.OptimalRecipeStorage] = optimals.OptimalRecipeStorage()
-depth_limit = 4
+depth_limit = 1
 extra_depth = 0
 case_sensitive = True
 allow_starting_elements = False
@@ -264,13 +265,16 @@ async def dls(session: aiohttp.ClientSession, state: GameState, depth: int) -> i
     # Very simple way to implement batching so that I can start requesting again
     # before pitching to writing my own state queue
 
-    request_list = []
-    for i, u in enumerate(state.items):
-        for j, v in enumerate(state.items):
-            if i <= j:
-                request_list.append((u, v))
+    def requests_gen() -> Iterator[str, str]:
+        for i, u in enumerate(state.items):
+            # print(i, u)
+            for j, v in enumerate(state.items):
+                if i > j:
+                    continue
+                yield u, v
+
     # First do the batch requests
-    current_combinations = await recipe_handler.combine_batch(session, request_list)
+    current_combinations = await recipe_handler.combine_batch(session, requests_gen())
     # TODO: Only request locally a single time - that is, use the results above to inform next steps directly
     # instead of having to pass in recipe handler and let state.child request
 

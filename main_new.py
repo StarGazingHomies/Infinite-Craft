@@ -215,6 +215,8 @@ def gamestate_from_strong_repr(s: str) -> GameState:
 async def dls(session: aiohttp.ClientSession, init_state: GameState, depth: int):
     # Maintain the following
     new_states: list[tuple[int, GameState]] = [(depth, init_state), ]
+    generating_states: list[tuple[int, GameState, Iterator]] = []
+    # TODO: Lazily generate if there's >50 combinations. (Not useful for base-4-elements searches)
     waiting_states: list[tuple[int, GameState]] = []
     # There is a counter for duplicate requests, so they are only requested once, but multiple states can use it
     # until it falls out of cache
