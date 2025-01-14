@@ -6,6 +6,7 @@ import sys
 import time
 from functools import cache
 from typing import Optional
+from collections.abc import Iterator
 from urllib.parse import quote_plus
 
 import json
@@ -29,7 +30,7 @@ persistent_config = util.load_json("config.json")
 
 recipe_handler: Optional[recipe.RecipeHandler] = recipe.RecipeHandler(init_state, **persistent_config)
 optimal_handler: Optional[optimals.OptimalRecipeStorage] = optimals.OptimalRecipeStorage()
-depth_limit = 4
+depth_limit = 3
 extra_depth = 0
 case_sensitive = True
 allow_starting_elements = False
@@ -50,7 +51,6 @@ def limit(n: int) -> int:
 class GameState:
     items: list[str]
     state: list[int]
-    visited: list[set[str]]
     used: list[int]
     children: set[str]
 
@@ -99,6 +99,17 @@ class GameState:
     def __hash__(self):
         return hash(str(self.state))
 
+    def copy(self):
+        return GameState(self.items.copy(), self.state.copy(), self.children.copy(), self.used.copy())
+
+    def strong_repr(self):
+        return "==".join([
+            "=".join(self.items),
+            "=".join([str(i) for i in self.state]),
+            "=".join(self.children),
+            "=".join([str(i) for i in self.used])
+        ])
+
     def to_list(self) -> list[tuple[str, str, str]]:
         l: list[tuple[str, str, str]] = []
         for i in range(len(self.state)):
@@ -108,41 +119,38 @@ class GameState:
             l.append((self.items[left], self.items[right], self.items[i]))
         return l
 
-    def get_children(self, depth: int) -> list[int]:
+    def generate_children(self, depth: int) -> Iterator[int]:
         unused_items = self.unused_items()
         if len(unused_items) > depth + 1:  # Impossible to use all elements, since we have too few crafts left
-            return []
+            pass
         elif len(unused_items) > depth:  # We must start using unused elements NOW.
-            states = []
             for j in range(len(unused_items)):  # For loop ordering is important. We want increasing pair_to_int order.
                 for i in range(j):  # i != j. We have to use two for unused_items to decrease.
-                    states.append(pair_to_int(unused_items[i], unused_items[j]))
-            return states
+                    yield pair_to_int(unused_items[i], unused_items[j])
         else:
             lower_limit = 0
-            if self.tail_index != -1:
+            if self.tail_index() != -1:
                 if depth == 1:  # Must use the 2nd last element, if it's not a default item.
                     lower_limit = limit(len(self) - 1)
                 else:
                     lower_limit = self.tail_index() + 1
 
-            return list(range(lower_limit, limit(len(self))))  # Regular ol' searching
+            for i in range(lower_limit, limit(len(self))):
+                yield i  # Regular ol' searching
 
     def request_limit(self) -> int:
         return limit(len(self) - 1)
 
-    def get_requests_index(self, depth: int) -> list[int]:
-        r = self.get_children(depth)
+    def generate_requests_index(self, depth: int) -> Iterator[int]:
+        r = self.generate_children(depth)
         if self.tail_index() != -1:
-            return list(filter(lambda x: x >= self.request_limit(), r))
+            return filter(lambda x: x >= self.request_limit(), r)
         return r
 
-    def get_requests(self, depth: int) -> list[tuple[str, str]]:
-        r = []
-        for i in self.get_requests_index(depth):
+    def generate_requests(self, depth: int) -> Iterator[tuple[str, str]]:
+        for i in self.generate_requests_index(depth):
             u, v = int_to_pair(i)
-            r.append((self.items[u], self.items[v]))
-        return r
+            yield self.items[u], self.items[v]
 
     def child(self, i: int, result: str) -> Optional['GameState']:
         # Invalid indices
@@ -195,47 +203,60 @@ class GameState:
         return self.state[-1]
 
 
-# print(init_gamestate.get_children(3))
-# print(init_gamestate.get_requests_index(3))
-# print(init_gamestate.get_requests(3))
-# state2 = init_gamestate.child(0, "Lake")
-# print(state2.get_children(2))
-# print(state2.get_requests_index(2))
-# print(state2.get_requests(2))
+def gamestate_from_strong_repr(s: str) -> GameState:
+    items, state, children, used = s.split("==")
+    items = items.split("=")
+    state = [int(i) for i in state.split("=")]
+    children = set(children.split("="))
+    used = [int(i) for i in used.split("=")]
+    return GameState(items, state, children, used)
 
 
 async def dls(session: aiohttp.ClientSession, init_state: GameState, depth: int):
     # Maintain the following
     new_states: list[tuple[int, GameState]] = [(depth, init_state), ]
+    generating_states: list[tuple[int, GameState, Iterator]] = []
+    # TODO: Lazily generate if there's >50 combinations. (Not useful for base-4-elements searches)
     waiting_states: list[tuple[int, GameState]] = []
     # There is a counter for duplicate requests, so they are only requested once, but multiple states can use it
     # until it falls out of cache
     request_list: dict[tuple[str, str], int] = {}
     finished_requests: dict[tuple[str, str], tuple[str, int]] = {}
 
-    dls_results = set()
+    dls_results: set[str] = set()
+    loop_counter: int = 0
+    status_period: int = 10000
 
     while len(new_states) > 0 or len(request_list) > 0:
-        print("----------- New Loop ------------")
-        print(new_states, waiting_states, request_list, finished_requests, sep="\n")
+        # print("----------- New Loop ------------")
+        # print(new_states, waiting_states, request_list, finished_requests, sep="\n")
+        loop_counter += 1
+        if loop_counter >= status_period:
+            # print(new_states, waiting_states, request_list, finished_requests, sep="\n")
+            print(f"""New States: {len(new_states)} items
+Waiting States: {len(waiting_states)} items
+Request List: {len(request_list)} items
+Finished requests: {len(finished_requests)} items\n""")
+            loop_counter = 0
+
 
         if len(new_states) > 0:
             print("> Processing new state")
             # Process new states' tail
             cur_depth, cur_state = new_states.pop(-1)
-            print(cur_depth, cur_state)
+            print(cur_depth, cur_state.strong_repr().replace("==", "\n"))
 
             if cur_depth == 0:
-                print("> Found leaf state")
-                print(str(cur_state))
+                # print("> Found leaf state")
+                # print(str(cur_state))
                 dls_results.add(cur_state.tail_item())
                 # TODO: Process state
                 continue
 
             # Get the requests
-            requests = cur_state.get_requests(depth)
-            print("Requests:", requests)
-            if requests is None:
+            requests = list(cur_state.generate_requests(cur_depth))
+            # print("Requests:", requests)
+            if not requests:
                 continue
 
             # Add the requests to the list
@@ -254,31 +275,33 @@ async def dls(session: aiohttp.ClientSession, init_state: GameState, depth: int)
             continue
 
         # Process the requests
-        print("Requesting results...")
-        print("Request list:", request_list)
-        print("Already finished:", finished_requests)
+        # print("Requesting results...")
+        # print("Request list:", request_list)
+        # print("Already finished:", finished_requests)
         requests = list(request_list.keys())[-util.BATCH_SIZE:]
-        print("Requests:", requests)
+        # print("Requests:", requests)
         results = await recipe_handler.combine_batch(session, requests)
-        print("Results:", results)
+        # print("Results:", results)
         for i, r in enumerate(results):
             finished_requests[(r[0], r[1])] = (r[2], request_list[(r[0], r[1])])
 
         request_list = {k: v for k, v in request_list.items() if k not in requests}
 
-        print("New finished:", finished_requests)
+        # print("New finished:", finished_requests)
+        # TODO: Is there a way to use callbacks to clean this up?
+        # Or, at least, let asyncio do the scheduling instead of this monstrosity
 
         new_waiting_states = []
         # Process the results
         for depth, state in waiting_states[::-1]:
-            print("Matching results:", state, state.get_requests(depth), state.get_children(depth), sep="\n")
+            # print("Matching results:", state, state.get_requests(depth), state.get_children(depth), sep="\n")
             finished = True
-            for i in state.get_children(depth):
+            for i in state.generate_children(depth):
                 u, v = util.int_to_pair(i)
                 combination_result = None
                 if i < state.request_limit():
                     # Local result
-                    combination_result = await recipe_handler.combine(session, state.items[u], state.items[v])
+                    combination_result = recipe_handler.get_local(state.items[u], state.items[v])
                 else:
                     try:
                         combination_result, count = finished_requests[(state.items[u], state.items[v])]
@@ -314,11 +337,26 @@ init_gamestate = GameState(
 
 async def main():
     async with aiohttp.ClientSession() as session:
-        r = await dls(
-            session,
-            init_gamestate,
-            depth_limit)
-        print(len(r), r)
+        final_set = set()
+        for depth in range(1, depth_limit+1):
+            r = await dls(
+                session,
+                init_gamestate.copy(),
+                depth)
+            final_set = final_set.union(r)
+            print(len(r), len(final_set))
+
+
+# TODO: Autosaving and recovering from crashes
+
+@atexit.register
+def save_current_state():
+    print("Autosaving progress... (DOES NOT SAVE, WIP)")
+    # current_state = [new_states, waiting_states, request_list, finished_requests]
+    current_state = {}
+    with open(persistent_temporary_file, "w", encoding="utf-8") as file:
+        json.dump(current_state, file, ensure_ascii=False, indent=4)
+    os.replace(persistent_temporary_file, persistent_file)
 
 
 if __name__ == "__main__":

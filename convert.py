@@ -1069,9 +1069,15 @@ def convert_to_savefile_new(output_file: str):
 
     items = {}
     items_savefile = {}
+    first_discoveries_count = 0
     for i in items_cur:
         items[i[2]] = [i[0], i[1], i[3]]
         items_savefile[i[2]] = {"text": i[2], "emoji": i[1], "discovered": i[3]}
+        if i[3]:
+            first_discoveries_count += 1
+
+    print(f"The database has {first_discoveries_count} FDs!")
+    # return
 
     recipes_cur = rh.db.cursor()
     recipes_cur.execute("""

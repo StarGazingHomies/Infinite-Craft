@@ -10,6 +10,22 @@ Maybe even alpha-beta pruning (using heuristic)?
 - OptimizerRecipeList and RecipeHandler common interface
 - Queueing system for requests (instead of just locking)
 
+## Version 1.6.0a1
+
+- Added `main_new.py` that uses some weird green loop magic to
+batch letters to be sent to Princess Celestia (I swear,
+web programming is magic!). Tested to 6-step...
+- "Patched" `main.py` to also use batch requests. 
+- TODO: Determine which is faster in a real-world scenario
+- TODO: Add a threaded option (d1 then branch off), 
+to see if sacrificing a bit of "order" is worth it for 
+computational power
+- TODO: Add saving and crash-handling logic to main_new
+- TODO: Revisit some of the old low-step data so I can verify
+up to 8-step or 9-step, because more have been found since
+revivals.
+
+
 ## Version 1.5.3
 
 - Simple results database `optimals.py` for the main results

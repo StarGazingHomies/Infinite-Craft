@@ -19,11 +19,12 @@ pip install -r requirements.txt
 `optimize.py` can help you optimize your speedruns.
 Use `-h` for help with any CLI arguments.
 
-Note: You need to provide your own configuration and headers for requests
-in `config.json` and `headers.json` respectively.
+Note: The code, as it is, does **NOT** scrape from Neal's Infinite Craft API.
+You will need to modify `recipes.py`, as well as provide your own `config.json`
+and `headers.json`. There will **NOT** be a tutorial on scraping.
 
-Currently, this code is NOT set up to request from Neal's Infinite Craft
-API. You will need to set up your own request system.
+TODO: Make savefile optimizer (A*, as well as maybe other algos in the future)
+more accessible, similar to Infinibrowser (which actually uses `simple_generational.py`!)
 
 ## Methodology
 

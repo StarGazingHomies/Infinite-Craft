@@ -215,7 +215,7 @@ class RecipeHandler:
         self.add_item(result, emoji, new)
 
         # Save as the fake nothing if it's the first run
-        if result == "Nothing" and self.get_local(a, b) and not self.trust_first_run_nothing:
+        if result == "Nothing" and self._get_local(a, b) and not self.trust_first_run_nothing:
             result = self.local_nothing_indication
 
         # Recipe: A + B --> C
@@ -227,7 +227,7 @@ class RecipeHandler:
             self.db.commit()
             self.current_response_count = 0
 
-    def get_local(self, a: str, b: str) -> Optional[str]:
+    def _get_local(self, a: str, b: str) -> Optional[str]:
         a = util.to_start_case(a)
         b = util.to_start_case(b)
         if a > b:
@@ -240,6 +240,12 @@ class RecipeHandler:
             return result[0]
         else:
             return None
+
+    def get_local(self, a: str, b: str) -> Optional[str]:
+        result = self._get_local(a, b)
+        if result == self.local_nothing_indication:
+            result = "Nothing"
+        return result
 
     def get_uses(self, a: str) -> list[tuple[str, str]]:
         cur = self.db.cursor()
@@ -307,7 +313,7 @@ class RecipeHandler:
         # Query local cache
         local_result = None
         if not ignore_local:
-            local_result = self.get_local(a, b)
+            local_result = self._get_local(a, b)
 
         # TODO: Re-request Nothing SETTING instead of db command
         # if local_result == "Nothing":
@@ -356,7 +362,7 @@ class RecipeHandler:
 
         # Query local cache
         if check_local:
-            local_results = [self.get_local(a, b) for a, b in batch]
+            local_results = [self._get_local(a, b) for a, b in batch]
 
             if self.local_only:
                 final_results = [(a, b, "Nothing") for a, b in batch]
