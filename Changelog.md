@@ -10,20 +10,30 @@ Maybe even alpha-beta pruning (using heuristic)?
 - OptimizerRecipeList and RecipeHandler common interface
 - Queueing system for requests (instead of just locking)
 
+`mane-parallel` TODO:
+- Add a threaded option (d1 then branch off), 
+to see if sacrificing a bit of "order" is worth it for 
+computational power
+- Add saving and crash-handling logic to main_new
+- Revisit some of the old low-step data so I can verify
+up to 8-step or 9-step, because more have been found since
+revivals.
+
+`mane-parallel` Shelved Ideas:
+- Lazy generation of recipes (not useful, unless the starting element set)
+is very large, which almost never happens.
+
+## Version 1.6.0a2
+- Added a counter to recipe handler to count request saturation.
+- `main_new.py` is able to request at 47rps (on a 50rps limit) for up to 6-step.
+- Tested lazy generation
+
 ## Version 1.6.0a1
 
 - Added `main_new.py` that uses some weird green loop magic to
 batch letters to be sent to Princess Celestia (I swear,
 web programming is magic!). Tested to 6-step...
 - "Patched" `main.py` to also use batch requests. 
-- TODO: Determine which is faster in a real-world scenario
-- TODO: Add a threaded option (d1 then branch off), 
-to see if sacrificing a bit of "order" is worth it for 
-computational power
-- TODO: Add saving and crash-handling logic to main_new
-- TODO: Revisit some of the old low-step data so I can verify
-up to 8-step or 9-step, because more have been found since
-revivals.
 
 
 ## Version 1.5.3

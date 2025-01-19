@@ -67,6 +67,9 @@ class RecipeHandler:
     auto_commit_interval: int = 1000  # Commit every 1000 requests
     current_response_count: int = 0
 
+    # Debugging / Performance
+    request_count: int = 0
+
     print_new_recipes: bool = True
 
     headers: dict[str, str] = {}
@@ -439,6 +442,10 @@ class RecipeHandler:
             return await self._request_pair(session, a, b)
 
     async def _request_pair(self, session: aiohttp.ClientSession, a: str, b: str) -> dict:
+        # Warning: To request from Neal's API, you must modify the code below.
+        self.request_count += 1
+
+        # Cooldown
         t = time.perf_counter()
         if (t - self.last_request) < self.request_cooldown:
             time.sleep(self.request_cooldown - (t - self.last_request))
@@ -474,6 +481,10 @@ class RecipeHandler:
                 print("Retrying...", flush=True)
 
     async def _request_batch(self, session: aiohttp.ClientSession, batch):
+        # Warning: No batch request exists for Neal's API. You must modify the code below for personal use.
+        self.request_count += len(batch)
+
+        # Formatting
         batch_uri_list = [
             (util.uriencode(a),
              util.uriencode(b))

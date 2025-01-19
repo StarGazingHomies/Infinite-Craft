@@ -30,7 +30,7 @@ persistent_config = util.load_json("config.json")
 
 recipe_handler: Optional[recipe.RecipeHandler] = recipe.RecipeHandler(init_state, **persistent_config)
 optimal_handler: Optional[optimals.OptimalRecipeStorage] = optimals.OptimalRecipeStorage()
-depth_limit = 3
+depth_limit = 6
 extra_depth = 0
 case_sensitive = True
 allow_starting_elements = False
@@ -213,10 +213,9 @@ def gamestate_from_strong_repr(s: str) -> GameState:
 
 
 async def dls(session: aiohttp.ClientSession, init_state: GameState, depth: int):
+
     # Maintain the following
     new_states: list[tuple[int, GameState]] = [(depth, init_state), ]
-    generating_states: list[tuple[int, GameState, Iterator]] = []
-    # TODO: Lazily generate if there's >50 combinations. (Not useful for base-4-elements searches)
     waiting_states: list[tuple[int, GameState]] = []
     # There is a counter for duplicate requests, so they are only requested once, but multiple states can use it
     # until it falls out of cache
@@ -227,24 +226,25 @@ async def dls(session: aiohttp.ClientSession, init_state: GameState, depth: int)
     loop_counter: int = 0
     status_period: int = 10000
 
+
     while len(new_states) > 0 or len(request_list) > 0:
         # print("----------- New Loop ------------")
         # print(new_states, waiting_states, request_list, finished_requests, sep="\n")
         loop_counter += 1
         if loop_counter >= status_period:
             # print(new_states, waiting_states, request_list, finished_requests, sep="\n")
-            print(f"""New States: {len(new_states)} items
-Waiting States: {len(waiting_states)} items
-Request List: {len(request_list)} items
-Finished requests: {len(finished_requests)} items\n""")
+#             print(f"""New States: {len(new_states)} items
+# Waiting States: {len(waiting_states)} items
+# Request List: {len(request_list)} items
+# Finished requests: {len(finished_requests)} items\n""")
             loop_counter = 0
 
 
         if len(new_states) > 0:
-            print("> Processing new state")
+            # print("> Processing new state")
             # Process new states' tail
             cur_depth, cur_state = new_states.pop(-1)
-            print(cur_depth, cur_state.strong_repr().replace("==", "\n"))
+            # print(cur_depth, cur_state.strong_repr().replace("==", "\n"))
 
             if cur_depth == 0:
                 # print("> Found leaf state")
@@ -336,6 +336,7 @@ init_gamestate = GameState(
 
 
 async def main():
+    t0 = time.perf_counter()
     async with aiohttp.ClientSession() as session:
         final_set = set()
         for depth in range(1, depth_limit+1):
@@ -345,6 +346,11 @@ async def main():
                 depth)
             final_set = final_set.union(r)
             print(len(r), len(final_set))
+
+    request_count = recipe_handler.request_count
+    t1 = time.perf_counter()
+    print(f"Finished in {t1 - t0} seconds with {request_count} requests")
+    print(f"RPS: {request_count / (t1 - t0)}")
 
 
 # TODO: Autosaving and recovering from crashes
